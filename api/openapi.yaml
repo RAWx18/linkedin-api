@@ -9,8 +9,8 @@ info:
     internal profile API and returns it as a normalized JSON document.
   version: "2.2"
 servers:
-  - url: https://your-app.azurecontainerapps.io
-    description: Production (replace with the deployed URL)
+  - url: https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io
+    description: Production
   - url: http://localhost:8080
     description: Local development
 

@@ -1,7 +1,8 @@
 # API
 
-The base URL is the deployed host, or `http://localhost:8080` locally. All
-responses are JSON.
+The production base URL is
+`https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io`, or
+`http://localhost:8080` locally. All responses are JSON.
 
 ## Authentication
 

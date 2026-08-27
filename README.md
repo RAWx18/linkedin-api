@@ -9,6 +9,31 @@ Access is authenticated with your own account only. The service does not bypass
 authentication, solve challenges, or evade rate limits, and it stays within the
 limits LinkedIn returns.
 
+## Live deployment
+
+The API runs on Azure Container Apps behind managed HTTPS:
+
+```
+https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io
+```
+
+The health endpoint is public, so the deployment is trivial to verify:
+
+```bash
+curl https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io/healthz
+# {"status":"ok"}
+```
+
+The profile endpoint requires an API key (`API_KEYS` is mandatory in production);
+the key is shared with the submission rather than committed here:
+
+```bash
+curl "https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
+  -H "X-API-Key: <key provided with the submission>"
+```
+
+A full example response is in [docs/api.md](docs/api.md).
+
 ## Stack
 
 Go 1.25 and the standard library HTTP stack, Prometheus metrics, a small Vite and
