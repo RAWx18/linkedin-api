@@ -180,7 +180,7 @@ button:disabled {
 .options summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.35rem;
   padding: 0.7rem 1rem;
   cursor: pointer;
   font-size: 0.8rem;
@@ -198,7 +198,8 @@ button:disabled {
 }
 
 .options summary::after {
-  content: "▾";
+  content: "\25BE";
+  margin-left: auto;
   font-size: 0.75rem;
   transition: transform 120ms ease;
 }
