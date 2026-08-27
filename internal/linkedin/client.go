@@ -6,6 +6,7 @@ package linkedin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -90,12 +91,23 @@ func orDefault(v, def string) string {
 // session by default, or a caller-supplied session for that single call.
 func (c *Client) FetchProfile(ctx context.Context, publicID string, cred Credential) (json.RawMessage, error) {
 	path, query := profileRequest(publicID)
-	return c.get(ctx, "profile", path, query, cred)
+	return c.get(ctx, "profile", path, query, acceptJSON, cred)
+}
+
+// FetchProfileSection retrieves one enrichment section for a profile URN. The
+// section is validated against the closed allowlist, so an unknown section never
+// reaches the network. The response is LinkedIn's normalized data/included form.
+func (c *Client) FetchProfileSection(ctx context.Context, section Section, profileUrn string, cred Credential) (json.RawMessage, error) {
+	path, query, ok := sectionRequest(section, profileUrn)
+	if !ok {
+		return nil, domain.Internal(fmt.Errorf("unknown profile section %q", section))
+	}
+	return c.get(ctx, "section:"+string(section), path, query, acceptNormalized, cred)
 }
 
 // get runs a bounded retry loop over a single GET request. The overall deadline
 // spans all attempts so total time is capped regardless of retries.
-func (c *Client) get(ctx context.Context, endpoint, path string, query url.Values, cred Credential) (json.RawMessage, error) {
+func (c *Client) get(ctx context.Context, endpoint, path string, query url.Values, accept string, cred Credential) (json.RawMessage, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
@@ -105,7 +117,7 @@ func (c *Client) get(ctx context.Context, endpoint, path string, query url.Value
 	}
 
 	for attempt := 0; ; attempt++ {
-		body, retry, err := c.attempt(ctx, endpoint, target, cred)
+		body, retry, err := c.attempt(ctx, endpoint, target, accept, cred)
 		if err == nil {
 			return body, nil
 		}
@@ -121,12 +133,12 @@ func (c *Client) get(ctx context.Context, endpoint, path string, query url.Value
 }
 
 // attempt performs one request and reports whether a retry is warranted.
-func (c *Client) attempt(ctx context.Context, endpoint, target string, cred Credential) (json.RawMessage, bool, error) {
+func (c *Client) attempt(ctx context.Context, endpoint, target, accept string, cred Credential) (json.RawMessage, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, false, domain.Internal(err)
 	}
-	c.setHeaders(req, cred)
+	c.setHeaders(req, accept, cred)
 	c.logRequest(ctx, endpoint, req, cred)
 
 	start := time.Now()
@@ -167,9 +179,9 @@ func (c *Client) attempt(ctx context.Context, endpoint, target string, cred Cred
 	return nil, retryableStatus(resp.StatusCode), derr
 }
 
-func (c *Client) setHeaders(req *http.Request, cred Credential) {
+func (c *Client) setHeaders(req *http.Request, accept string, cred Credential) {
 	h := req.Header
-	h.Set("Accept", "application/json")
+	h.Set("Accept", accept)
 	h.Set("User-Agent", cred.userAgentOr(c.userAgent))
 	h.Set("Accept-Language", c.acceptLanguage)
 	h.Set("X-RestLi-Protocol-Version", "2.0.0")

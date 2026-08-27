@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,6 +33,25 @@ func main() {
 		_, _ = os.Stderr.WriteString("fatal: " + err.Error() + "\n")
 		os.Exit(1)
 	}
+}
+
+// profileSections resolves the configured section names to the client's closed
+// allowlist, failing fast on an unknown name so misconfiguration is caught at
+// startup rather than silently dropping data.
+func profileSections(names []string) ([]linkedin.Section, error) {
+	out := make([]linkedin.Section, 0, len(names))
+	seen := make(map[linkedin.Section]bool)
+	for _, name := range names {
+		sec, ok := linkedin.ParseSection(strings.ToLower(strings.TrimSpace(name)))
+		if !ok {
+			return nil, fmt.Errorf("unknown PROFILE_SECTIONS entry %q", name)
+		}
+		if !seen[sec] {
+			seen[sec] = true
+			out = append(out, sec)
+		}
+	}
+	return out, nil
 }
 
 func run() error {
@@ -68,15 +88,22 @@ func run() error {
 		negative = cache.NewNegative(cfg.Upstream.NegativeCacheTTL, cfg.Cache.MaxEntries)
 	}
 
+	sections, err := profileSections(cfg.LinkedIn.Sections)
+	if err != nil {
+		return err
+	}
+
 	svc := service.NewProfileService(service.Deps{
-		Client:           client,
-		Cache:            profileCache,
-		Negative:         negative,
-		Gate:             guard,
-		Metrics:          metrics,
-		Logger:           logger,
-		ProfileTimeout:   cfg.LinkedIn.ProfileTimeout,
-		CallerSessionTTL: cfg.Upstream.CallerSessionTTL,
+		Client:                client,
+		Cache:                 profileCache,
+		Negative:              negative,
+		Gate:                  guard,
+		Metrics:               metrics,
+		Logger:                logger,
+		ProfileTimeout:        cfg.LinkedIn.ProfileTimeout,
+		CallerSessionTTL:      cfg.Upstream.CallerSessionTTL,
+		EnrichmentSections:    sections,
+		EnrichmentConcurrency: cfg.LinkedIn.EnrichmentConcurrency,
 	})
 
 	// Auditing is best effort: if its store cannot be opened the service still

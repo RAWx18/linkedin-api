@@ -44,16 +44,18 @@ type ServerConfig struct {
 }
 
 type LinkedInConfig struct {
-	LiAt               string
-	JSessionID         string
-	BaseURL            string
-	UserAgent          string
-	AcceptLanguage     string
-	Timeout            time.Duration
-	MaxRetries         int
-	RetryBackoff       time.Duration
-	ProfileTimeout     time.Duration
-	AllowCallerSession bool
+	LiAt                  string
+	JSessionID            string
+	BaseURL               string
+	UserAgent             string
+	AcceptLanguage        string
+	Timeout               time.Duration
+	MaxRetries            int
+	RetryBackoff          time.Duration
+	ProfileTimeout        time.Duration
+	AllowCallerSession    bool
+	Sections              []string
+	EnrichmentConcurrency int
 }
 
 type CacheConfig struct {
@@ -121,16 +123,18 @@ func Load() (*Config, error) {
 			ShutdownTimeout: getEnvDuration("SHUTDOWN_TIMEOUT", 15*time.Second),
 		},
 		LinkedIn: LinkedInConfig{
-			LiAt:               getEnv("LINKEDIN_LI_AT", ""),
-			JSessionID:         getEnv("LINKEDIN_JSESSIONID", ""),
-			BaseURL:            getEnv("LINKEDIN_BASE_URL", "https://www.linkedin.com"),
-			UserAgent:          getEnv("LINKEDIN_USER_AGENT", ""),
-			AcceptLanguage:     getEnv("LINKEDIN_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
-			Timeout:            getEnvDuration("HTTP_REQUEST_TIMEOUT", 10*time.Second),
-			MaxRetries:         getEnvInt("HTTP_MAX_RETRIES", 2),
-			RetryBackoff:       getEnvDuration("HTTP_RETRY_BACKOFF", 300*time.Millisecond),
-			ProfileTimeout:     getEnvDuration("PROFILE_TIMEOUT", 15*time.Second),
-			AllowCallerSession: getEnvBool("LINKEDIN_ALLOW_CALLER_SESSION", true),
+			LiAt:                  getEnv("LINKEDIN_LI_AT", ""),
+			JSessionID:            getEnv("LINKEDIN_JSESSIONID", ""),
+			BaseURL:               getEnv("LINKEDIN_BASE_URL", "https://www.linkedin.com"),
+			UserAgent:             getEnv("LINKEDIN_USER_AGENT", ""),
+			AcceptLanguage:        getEnv("LINKEDIN_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
+			Timeout:               getEnvDuration("HTTP_REQUEST_TIMEOUT", 10*time.Second),
+			MaxRetries:            getEnvInt("HTTP_MAX_RETRIES", 2),
+			RetryBackoff:          getEnvDuration("HTTP_RETRY_BACKOFF", 300*time.Millisecond),
+			ProfileTimeout:        getEnvDuration("PROFILE_TIMEOUT", 15*time.Second),
+			AllowCallerSession:    getEnvBool("LINKEDIN_ALLOW_CALLER_SESSION", true),
+			Sections:              getEnvCSVOr("PROFILE_SECTIONS", []string{"experience", "education"}),
+			EnrichmentConcurrency: getEnvInt("ENRICHMENT_CONCURRENCY", 4),
 		},
 		Cache: CacheConfig{
 			Enabled:    getEnvBool("CACHE_ENABLED", true),
@@ -204,6 +208,9 @@ func (c *Config) Validate() error {
 	}
 	if c.LinkedIn.ProfileTimeout <= 0 {
 		problems = append(problems, "PROFILE_TIMEOUT must be > 0")
+	}
+	if c.LinkedIn.EnrichmentConcurrency <= 0 {
+		problems = append(problems, "ENRICHMENT_CONCURRENCY must be > 0")
 	}
 	if c.LinkedIn.LiAt != "" && c.LinkedIn.UserAgent == "" {
 		problems = append(problems, "LINKEDIN_USER_AGENT is required when LINKEDIN_LI_AT is set; set it to the exact User-Agent of the browser where you obtained the li_at and JSESSIONID cookies")
@@ -340,6 +347,14 @@ func getEnvDuration(key string, def time.Duration) time.Duration {
 		if d, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
 			return d
 		}
+	}
+	return def
+}
+
+// getEnvCSVOr returns the CSV value for key, or the default when the key is unset.
+func getEnvCSVOr(key string, def []string) []string {
+	if v := getEnvCSV(key); v != nil {
+		return v
 	}
 	return def
 }

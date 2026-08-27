@@ -24,9 +24,11 @@ import (
 
 type mockClient struct {
 	profileCalls int32
+	sectionCalls int32
 	mu           sync.Mutex
 	lastCred     linkedin.Credential
 	profile      func() (json.RawMessage, error)
+	section      func(linkedin.Section) (json.RawMessage, error)
 }
 
 func (m *mockClient) FetchProfile(_ context.Context, _ string, cred linkedin.Credential) (json.RawMessage, error) {
@@ -38,6 +40,17 @@ func (m *mockClient) FetchProfile(_ context.Context, _ string, cred linkedin.Cre
 		return m.profile()
 	}
 	return json.RawMessage(`{"elements":[{"firstName":"Ada","lastName":"Lovelace"}]}`), nil
+}
+
+func (m *mockClient) FetchProfileSection(_ context.Context, section linkedin.Section, _ string, cred linkedin.Credential) (json.RawMessage, error) {
+	atomic.AddInt32(&m.sectionCalls, 1)
+	m.mu.Lock()
+	m.lastCred = cred
+	m.mu.Unlock()
+	if m.section != nil {
+		return m.section(section)
+	}
+	return json.RawMessage(`{"data":{"*elements":[]},"included":[]}`), nil
 }
 
 func (m *mockClient) usedCaller() bool {

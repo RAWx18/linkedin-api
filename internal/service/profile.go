@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -22,6 +23,11 @@ import (
 const (
 	sourceLinkedIn        = "linkedin"
 	defaultProfileTimeout = 15 * time.Second
+
+	defaultEnrichConcurrency = 4
+	sectionOK                = "ok"
+	sectionEmpty             = "empty"
+	sectionUnavailable       = "unavailable"
 )
 
 // LinkedInClient is the subset of the LinkedIn integration the service needs.
@@ -29,6 +35,7 @@ const (
 // credential selects which session authenticates the single request.
 type LinkedInClient interface {
 	FetchProfile(ctx context.Context, publicID string, cred linkedin.Credential) (json.RawMessage, error)
+	FetchProfileSection(ctx context.Context, section linkedin.Section, profileUrn string, cred linkedin.Credential) (json.RawMessage, error)
 }
 
 // Cache is the caching behavior the service relies on.
@@ -62,6 +69,11 @@ type Deps struct {
 	Logger           *slog.Logger
 	ProfileTimeout   time.Duration
 	CallerSessionTTL time.Duration
+
+	// EnrichmentSections lists the optional sections to fetch after the core
+	// profile. EnrichmentConcurrency bounds how many run at once across the service.
+	EnrichmentSections    []linkedin.Section
+	EnrichmentConcurrency int
 }
 
 // ProfileService coordinates profile retrieval, protection, and normalization.
@@ -75,6 +87,8 @@ type ProfileService struct {
 	metrics        *observability.Metrics
 	logger         *slog.Logger
 	profileTimeout time.Duration
+	enrichSections []linkedin.Section
+	enrichSem      chan struct{}
 }
 
 // NewProfileService wires the service dependencies, substituting inert defaults
@@ -89,6 +103,9 @@ func NewProfileService(d Deps) *ProfileService {
 	if d.ProfileTimeout <= 0 {
 		d.ProfileTimeout = defaultProfileTimeout
 	}
+	if d.EnrichmentConcurrency <= 0 {
+		d.EnrichmentConcurrency = defaultEnrichConcurrency
+	}
 	return &ProfileService{
 		client:         d.Client,
 		cache:          d.Cache,
@@ -98,6 +115,8 @@ func NewProfileService(d Deps) *ProfileService {
 		metrics:        d.Metrics,
 		logger:         d.Logger,
 		profileTimeout: d.ProfileTimeout,
+		enrichSections: d.EnrichmentSections,
+		enrichSem:      make(chan struct{}, d.EnrichmentConcurrency),
 	}
 }
 
@@ -169,7 +188,7 @@ func (s *ProfileService) retrieve(ctx context.Context, ref urlx.ProfileRef, cred
 	}
 	audit.MarkUpstreamCalled(ctx)
 
-	result, ferr := s.fetchAndParse(ctx, ref, cred)
+	result, urn, ferr := s.fetchCore(ctx, ref, cred)
 	release(ferr)
 
 	if ferr != nil {
@@ -179,6 +198,7 @@ func (s *ProfileService) retrieve(ctx context.Context, ref urlx.ProfileRef, cred
 		}
 		return nil, ferr
 	}
+	s.enrichResult(ctx, result, urn, cred)
 	audit.SetUpstreamOutcome(ctx, audit.OutcomeOK)
 	s.cache.Set(ref.PublicID, result)
 	return result, nil
@@ -208,7 +228,7 @@ func (s *ProfileService) getCaller(ctx context.Context, ref urlx.ProfileRef, cre
 	}
 	audit.MarkUpstreamCalled(ctx)
 
-	result, ferr := s.fetchAndParse(ctx, ref, cred)
+	result, urn, ferr := s.fetchCore(ctx, ref, cred)
 	release(ferr)
 
 	if ferr != nil {
@@ -223,6 +243,7 @@ func (s *ProfileService) getCaller(ctx context.Context, ref urlx.ProfileRef, cre
 		audit.SetUpstreamOutcome(ctx, errCode(ferr))
 		return nil, ferr
 	}
+	s.enrichResult(ctx, result, urn, cred)
 	s.callerHealth.clear(fp)
 	s.updateCallerGauge()
 	s.metrics.Profiles.WithLabelValues("success").Inc()
@@ -242,28 +263,98 @@ func errCallerSessionInvalid() error {
 	return domain.CallerSessionInvalid("the supplied LinkedIn session is invalid or expired; provide a fresh authorized session")
 }
 
-// fetchAndParse makes the base profile call with the given credential and
-// normalizes it.
-func (s *ProfileService) fetchAndParse(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, error) {
+// fetchCore makes the base profile call and normalizes it, returning the core
+// result and the profile URN that keys optional section enrichment.
+func (s *ProfileService) fetchCore(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, string, error) {
 	raw, err := s.client.FetchProfile(ctx, ref.PublicID, cred)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	profile, err := parse.Profile(raw, ref)
 	if err != nil {
 		if de, ok := domain.AsError(err); ok && de.Code == domain.CodeUpstreamParseError {
 			s.metrics.ParseFailures.Inc()
 		}
-		return nil, err
+		return nil, "", err
 	}
-	return &domain.ProfileResult{
+	result := &domain.ProfileResult{
 		Profile: profile,
 		Meta: domain.Meta{
 			RetrievedAt:   time.Now().UTC(),
 			SchemaVersion: domain.SchemaVersion,
 			Source:        sourceLinkedIn,
 		},
-	}, nil
+	}
+	return result, parse.ProfileURN(raw), nil
+}
+
+// enrichResult runs the configured optional section enrichment on an assembled
+// core result. It runs after the core gate slot is released so sections use the
+// full upstream concurrency budget, and is a no-op when nothing is configured or
+// the profile URN is absent.
+func (s *ProfileService) enrichResult(ctx context.Context, result *domain.ProfileResult, profileURN string, cred linkedin.Credential) {
+	if profileURN == "" || len(s.enrichSections) == 0 {
+		return
+	}
+	result.Meta.Sections = s.enrich(ctx, result.Profile, profileURN, cred)
+}
+
+// enrich fetches the configured optional sections concurrently, bounded by the
+// global enrichment semaphore, and reports each section's status. Every section
+// is failure-isolated: an error, timeout, or empty result is recorded and never
+// affects the core profile that has already been assembled.
+func (s *ProfileService) enrich(ctx context.Context, profile *domain.Profile, profileURN string, cred linkedin.Credential) map[string]string {
+	mode := domain.ModeServer
+	if cred.IsCaller() {
+		mode = domain.ModeCaller
+	}
+	type outcome struct{ name, status string }
+	results := make(chan outcome, len(s.enrichSections))
+	var wg sync.WaitGroup
+	for _, section := range s.enrichSections {
+		wg.Add(1)
+		go func(section linkedin.Section) {
+			defer wg.Done()
+			results <- outcome{string(section), s.enrichSection(ctx, profile, section, profileURN, mode, cred)}
+		}(section)
+	}
+	wg.Wait()
+	close(results)
+	status := make(map[string]string, len(s.enrichSections))
+	for r := range results {
+		status[r.name] = r.status
+	}
+	return status
+}
+
+// enrichSection fetches and applies one section, returning its status. It holds a
+// global semaphore slot and a gate reservation for the duration of its upstream
+// call so total enrichment traffic stays within the aggregate budget. Concurrent
+// sections write disjoint profile fields, so no locking is required.
+func (s *ProfileService) enrichSection(ctx context.Context, profile *domain.Profile, section linkedin.Section, profileURN string, mode domain.CredentialMode, cred linkedin.Credential) string {
+	select {
+	case s.enrichSem <- struct{}{}:
+		defer func() { <-s.enrichSem }()
+	case <-ctx.Done():
+		return sectionUnavailable
+	}
+	release, err := s.gate.Enter(ctx, mode)
+	if err != nil {
+		return sectionUnavailable
+	}
+	raw, ferr := s.client.FetchProfileSection(ctx, section, profileURN, cred)
+	release(ferr)
+	if ferr != nil {
+		return sectionUnavailable
+	}
+	n, perr := parse.ApplySection(profile, string(section), raw)
+	if perr != nil {
+		return sectionUnavailable
+	}
+	if n == 0 {
+		return sectionEmpty
+	}
+	return sectionOK
 }
 
 // errCode reduces an error to a safe, non-sensitive label for the audit trail.

@@ -63,7 +63,7 @@ func validProdConfig() *Config {
 	return &Config{
 		Env:       EnvProduction,
 		Server:    ServerConfig{Port: 8080},
-		LinkedIn:  LinkedInConfig{BaseURL: "https://www.linkedin.com", UserAgent: "Mozilla/5.0 (test) Browser/1.0", Timeout: time.Second, ProfileTimeout: time.Second},
+		LinkedIn:  LinkedInConfig{BaseURL: "https://www.linkedin.com", UserAgent: "Mozilla/5.0 (test) Browser/1.0", Timeout: time.Second, ProfileTimeout: time.Second, EnrichmentConcurrency: 1},
 		Cache:     CacheConfig{Enabled: true, MaxEntries: 10},
 		RateLimit: RateLimitConfig{Enabled: true, RPS: 1, Burst: 1, KeyRPS: 1, KeyBurst: 1},
 		Upstream: UpstreamConfig{

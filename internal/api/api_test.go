@@ -39,6 +39,10 @@ func (m *mockClient) FetchProfile(_ context.Context, _ string, cred linkedin.Cre
 	return json.RawMessage(`{"elements":[{"firstName":"Ada","lastName":"Lovelace","headline":"Math"}]}`), nil
 }
 
+func (m *mockClient) FetchProfileSection(_ context.Context, _ linkedin.Section, _ string, _ linkedin.Credential) (json.RawMessage, error) {
+	return json.RawMessage(`{"data":{"*elements":[]},"included":[]}`), nil
+}
+
 func (m *mockClient) credential() linkedin.Credential {
 	m.mu.Lock()
 	defer m.mu.Unlock()
