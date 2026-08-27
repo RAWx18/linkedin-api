@@ -69,13 +69,14 @@ func run() error {
 	}
 
 	svc := service.NewProfileService(service.Deps{
-		Client:         client,
-		Cache:          profileCache,
-		Negative:       negative,
-		Gate:           guard,
-		Metrics:        metrics,
-		Logger:         logger,
-		ProfileTimeout: cfg.LinkedIn.ProfileTimeout,
+		Client:           client,
+		Cache:            profileCache,
+		Negative:         negative,
+		Gate:             guard,
+		Metrics:          metrics,
+		Logger:           logger,
+		ProfileTimeout:   cfg.LinkedIn.ProfileTimeout,
+		CallerSessionTTL: cfg.Upstream.CallerSessionTTL,
 	})
 
 	// Auditing is best effort: if its store cannot be opened the service still
