@@ -46,12 +46,12 @@ body {
   -webkit-font-smoothing: antialiased;
   display: flex;
   justify-content: center;
-  padding: 3rem 1.25rem 1.5rem;
+  padding: 2rem 1.5rem 1.25rem;
 }
 
 .app {
   width: 100%;
-  max-width: 680px;
+  max-width: 1100px;
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - 4.5rem);
@@ -59,7 +59,7 @@ body {
 
 .masthead {
   text-align: center;
-  margin-bottom: 2.25rem;
+  margin-bottom: 1.5rem;
 }
 
 .masthead h1 {
@@ -248,7 +248,7 @@ button:disabled {
 
 #status {
   min-height: 1.2rem;
-  margin: 1.1rem 0 0.9rem;
+  margin: 0.8rem 0;
   font-size: 0.85rem;
   text-align: center;
   color: var(--muted);
@@ -266,11 +266,33 @@ button:disabled {
   color: var(--pending);
 }
 
-.card {
+.result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.profile-card,
+.side-stack > .panel,
+.primary-stack > .json-block {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   overflow: hidden;
+}
+
+.profile-card,
+.primary-stack {
+  min-width: 0;
+}
+
+.primary-stack,
+.side-stack {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
 }
 
 .banner {
@@ -334,6 +356,40 @@ button:disabled {
   color: var(--accent);
 }
 
+.entries {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.entry {
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--line);
+}
+
+.entry-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.entry-sub {
+  font-size: 0.85rem;
+  margin-top: 0.1rem;
+}
+
+.entry-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+
+.entry-body {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 .headline {
   margin: 0.4rem 0 0.2rem;
   line-height: 1.45;
@@ -345,14 +401,14 @@ button:disabled {
   font-size: 0.85rem;
 }
 
-.block a {
+.panel a {
   color: var(--accent);
   font-size: 0.85rem;
   text-decoration: none;
   word-break: break-all;
 }
 
-.block a:hover,
+.panel a:hover,
 .id-box a:hover {
   text-decoration: underline;
 }
@@ -364,12 +420,15 @@ button:disabled {
   word-break: break-all;
 }
 
-.block {
+.panel {
   padding: 1.1rem 1.5rem 1.25rem;
+}
+
+.profile-card > .panel {
   border-top: 1px solid var(--line);
 }
 
-.block h3 {
+.panel h3 {
   margin: 0 0 0.65rem;
   font-size: 0.7rem;
   font-weight: 600;
@@ -380,25 +439,79 @@ button:disabled {
 
 .summary {
   margin: 0;
+  max-width: 72ch;
+  max-height: 15rem;
+  overflow: auto;
+  padding-right: 0.5rem;
   white-space: pre-wrap;
   line-height: 1.6;
   font-size: 0.92rem;
 }
 
-.links {
+.link-list {
   margin: 0;
   padding-left: 1.1rem;
   line-height: 1.7;
 }
 
-.meta-row {
+.link-list li + li {
+  margin-top: 0.25rem;
+}
+
+.chip-row {
   display: flex;
   flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.image-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.image-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--text) !important;
+  text-decoration: none !important;
+}
+
+.image-item img {
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+  object-fit: cover;
+  flex: none;
+}
+
+.image-item span {
+  display: grid;
+  min-width: 0;
+}
+
+.image-item strong {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.image-item small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.meta-row {
+  display: grid;
   gap: 0.45rem;
 }
 
 .meta-chip {
-  display: inline-flex;
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
   gap: 0.4rem;
   padding: 0.3rem 0.7rem;
@@ -452,7 +565,7 @@ button:disabled {
   border-radius: 10px;
   overflow: auto;
   overscroll-behavior: contain;
-  max-height: 22rem;
+  max-height: 18rem;
   font-family: var(--mono);
   font-size: 0.76rem;
   line-height: 1.65;
@@ -524,4 +637,24 @@ button:disabled {
   color: var(--muted);
   font-size: 0.76rem;
   letter-spacing: 0.02em;
+}
+
+@media (max-width: 780px) {
+  body {
+    padding: 1.5rem 1rem 1rem;
+  }
+
+  .app {
+    min-height: calc(100vh - 2.5rem);
+  }
+
+  .result-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-head,
+  .panel {
+    padding-left: 1.1rem;
+    padding-right: 1.1rem;
+  }
 }
