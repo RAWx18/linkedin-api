@@ -199,9 +199,24 @@ button:disabled {
 
 .options summary::after {
   content: "\25BE";
-  margin-left: auto;
+  margin-left: 0.5rem;
   font-size: 0.75rem;
   transition: transform 120ms ease;
+}
+
+.help-link {
+  margin-left: auto;
+  padding: 0.14rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.72rem;
+}
+
+.help-link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .options[open] summary::after {
