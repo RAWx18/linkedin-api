@@ -152,6 +152,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AUDIT_DB_PATH'
               value: '/data/audit.db'
             }
+            {
+              name: 'TRUSTED_PROXY_DEPTH'
+              value: '1'
+            }
           ], empty(auditAdminKeys) ? [] : [
             {
               name: 'AUDIT_ADMIN_KEYS'

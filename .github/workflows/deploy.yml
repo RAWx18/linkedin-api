@@ -76,6 +76,7 @@ jobs:
               linkedInJSessionID="${{ secrets.LINKEDIN_JSESSIONID }}" \
               linkedInUserAgent="${{ secrets.LINKEDIN_USER_AGENT }}" \
               apiKeys="${{ secrets.API_KEYS }}" \
+              auditAdminKeys="${{ secrets.AUDIT_ADMIN_KEYS }}" \
             --query properties.outputs.appUrl.value -o tsv)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed to $url"
