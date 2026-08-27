@@ -57,7 +57,10 @@ affects profile lookups.
 
 Operational metrics answer "how is the system behaving right now" and live in
 Prometheus. Durable, queryable request history answers "what exactly happened"
-and lives in a separate SQLite audit store, not in the metrics system. It powers
+and lives in a separate SQLite audit store, not in the metrics system. Every
+finished request is also emitted as a structured `audit` log event with the same
+privacy-safe fields, so the platform log pipeline holds a complete history even
+if the store is unavailable. It powers
 the protected `/admin/usage` endpoint and incident investigation. Each row also
 records the request's `credential_mode` (`server_session` or `caller_session`)
 and, for caller sessions, a non-reversible `cred_fp` fingerprint, so an operator
@@ -67,7 +70,7 @@ credential. The schema, privacy rules, retention, and example queries are in
 
 ## Azure
 
-Container stdout is collected into Log Analytics automatically, which is the main
-Azure signal today. `APPLICATIONINSIGHTS_CONNECTION_STRING` is accepted and passed
-through by the Bicep template, but the app does not export traces to Application
-Insights yet.
+Container stdout is collected into a Log Analytics workspace by the Container Apps
+environment, so the structured JSON logs are queryable there. Metrics are scraped
+from `/metrics` in the standard Prometheus format by whatever collector the
+platform provides.

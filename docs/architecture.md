@@ -57,11 +57,13 @@ A call to `GET /v1/profile` moves through these steps:
 4. On a miss it coalesces concurrent identical lookups, then passes the retrieval
    through the upstream gate (aggregate rate limit, concurrency ceiling, circuit
    breaker). If the gate rejects, no upstream call is made.
-5. Under a lookup deadline it fetches the base profile from the identity DASH
-   collection.
+5. Under a lookup deadline it fetches the top-card from the identity DASH finder.
 6. The parser normalizes the response into a `domain.Profile`; an empty
    collection is treated as not found.
-7. The result is cached and serialized as `{ "data": ..., "meta": ... }`.
+7. Any configured optional sections are fetched concurrently under the same
+   deadline, merged into the profile, and each recorded in `meta.sections`. A
+   failed or empty section never fails the core profile.
+8. The result is cached and serialized as `{ "data": ..., "meta": ... }`.
 
 The outermost `/v1/*` layer records one privacy-safe audit row per request,
 including rejected ones, without delaying the response. See

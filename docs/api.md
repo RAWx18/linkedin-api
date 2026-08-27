@@ -182,6 +182,21 @@ core profile, bounded and failure-isolated, and enabled through `PROFILE_SECTION
 The rationale and endpoint details are in
 [reverse-engineering.md](reverse-engineering.md).
 
+## GET /v1/image
+
+Proxies a profile image so the browser UI can render it; LinkedIn media URLs are
+not directly loadable from another origin. The endpoint sits behind the same
+authentication and rate limiting as `/v1/profile`.
+
+Query parameters:
+
+- `url` (required): an `https://media.licdn.com/...` image URL, exactly as
+  returned in `profile_picture` or `background_image`. Any other host or scheme
+  is rejected with `400`.
+
+The response is the image bytes with the upstream content type, capped at 8 MiB,
+with `Cache-Control: private, max-age=3600`.
+
 ## Health and metrics
 
 | Endpoint | Purpose |

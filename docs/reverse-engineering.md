@@ -1,117 +1,110 @@
 # LinkedIn integration
 
 LinkedIn's web client talks to an internal JSON API under
-`https://www.linkedin.com/voyager/api/`. The service authenticates with a
-signed-in session and reads the profile from the identity DASH collection.
+`https://www.linkedin.com/voyager/api/`. This service authenticates with a
+signed-in session and reads a member's profile from the identity DASH resources:
+one finder for the top-card, and one resource per optional section.
 
-## Endpoint
+## Core endpoint
 
 | Purpose | Endpoint |
 | --- | --- |
-| Base profile by public identifier | `identity/dash/profiles?q=memberIdentity&memberIdentity={publicId}` |
+| Top-card by public identifier | `identity/dash/profiles?q=memberIdentity&memberIdentity={publicId}` |
 
-The finder returns a collection whose first element is the member entity. An
-empty collection means the profile does not exist.
+The finder returns a collection whose first element is the member entity. An empty
+collection means the profile does not exist and maps to a not-found result.
 
 ## Authentication
 
-The API expects a signed-in browser session. Two cookie values from a normal
-login provide it:
+The API expects a signed-in browser session, provided by two cookie values from a
+normal login:
 
 - `LINKEDIN_LI_AT`, the `li_at` session cookie.
 - `LINKEDIN_JSESSIONID`, the `JSESSIONID` value, which looks like `ajax:1234...`.
 
 Each request sends both as cookies and the unquoted `JSESSIONID` as the
-`csrf-token` header, matching what the web client does. The session object is
-built once and never mutated, so concurrent requests cannot corrupt shared auth
-state. Setting these values is covered in
-[configuration.md](configuration.md#session-cookies).
+`Csrf-Token` header, matching the web client. The session is built once and never
+mutated, so concurrent requests cannot corrupt shared auth state. Obtaining the
+values is covered in [session-cookies.md](session-cookies.md).
 
 ## Session compatibility
 
-A LinkedIn session is bound to the browser that created it. The strongest signal
-LinkedIn uses to decide whether a request belongs to that session is the
-`User-Agent`. If the server presents a different `User-Agent` than the browser
-where the `li_at` and `JSESSIONID` cookies were obtained, LinkedIn can accept the
-first request and then challenge and invalidate the session, so the next request
-fails with `upstream_auth_failed`. This is the "works once, then fails" symptom.
+A LinkedIn session is bound to the browser that created it, and the strongest
+signal LinkedIn uses to decide whether a request belongs to that session is the
+`User-Agent`. If the service presents a different `User-Agent` than the browser
+where the cookies were obtained, LinkedIn can accept the first request and then
+challenge and invalidate the session, so the next request fails with
+`upstream_auth_failed`. That is the "works once, then fails" symptom.
 
-The fix is not evasion but correctness: present the same browser context. The
-service requires `LINKEDIN_USER_AGENT` to be set to the exact browser `User-Agent`
-whenever a session is configured, and refuses to start otherwise. The request
-header set is fixed and deterministic, so identical inputs always produce the same
-request:
+The remedy is to present the same browser context, not to evade detection. The
+service requires `LINKEDIN_USER_AGENT` to equal the exact browser `User-Agent`
+whenever a session is configured, and refuses to start otherwise. The header set
+is fixed, so identical inputs always produce the same request:
 
 | Header | Value |
 | --- | --- |
 | `User-Agent` | `LINKEDIN_USER_AGENT`, or a caller's `X-LinkedIn-User-Agent` |
-| `Accept` | `application/json` |
+| `Accept` | `application/json` for the top-card, `application/vnd.linkedin.normalized+json+2.1` for sections |
 | `Accept-Language` | `LINKEDIN_ACCEPT_LANGUAGE` (default `en-US,en;q=0.9`) |
 | `X-RestLi-Protocol-Version` | `2.0.0` |
 | `X-Li-Lang` | `en_US` |
 | `Cookie` | `li_at=...; JSESSIONID="ajax:..."` |
 | `Csrf-Token` | the unquoted `JSESSIONID` |
 
-`Accept` deliberately requests the non-normalized collection shape the parser
-reads; it is not changed to the web client's normalized media type.
+### Verifying the request matches your browser
 
-### Manual validation procedure
-
-To confirm the Go request matches your browser without ever exposing secrets:
+The request can be confirmed against a real browser without exposing any secret:
 
 1. In the browser signed in to LinkedIn, open a profile, then devtools, Network.
    Filter for `voyager/api/identity/dash/profiles` and open the request.
-2. Copy the exact `user-agent` request header and set `LINKEDIN_USER_AGENT` to it.
+2. Copy the exact `user-agent` request header into `LINKEDIN_USER_AGENT`.
 3. Start the service with `LOG_LEVEL=debug`. Each upstream call logs a
-   `linkedin upstream request` line with non-sensitive request metadata
-   (`user_agent`, `accept`, `accept_language`, cookie names, and whether a CSRF
-   token is present). Cookie values, `li_at`, `JSESSIONID`, and the CSRF token are
-   never logged.
-4. Compare the logged `user_agent` and header names with the browser request. Two
-   lookups produce identical request lines, confirming the deterministic model.
+   `linkedin upstream request` line with non-sensitive metadata: `user_agent`,
+   `accept`, `accept_language`, the cookie names, and whether a CSRF token is
+   present. Cookie values, `li_at`, `JSESSIONID`, and the CSRF token are never
+   logged.
+4. Compare the logged `user_agent` and header names against the browser. Two
+   lookups produce identical request lines.
 
-### Caller sessions
+A caller supplying its own session can also send the matching `X-LinkedIn-User-Agent`
+so its session context stays consistent for that one request; it never changes the
+server `User-Agent`.
 
-A caller supplying its own session can also supply the matching browser
-`User-Agent` through the optional `X-LinkedIn-User-Agent` header, so its session
-stays consistent. It applies only to that request and never changes the server
-`User-Agent`.
+## Top-card normalization
 
-## Response shape and normalization
-
-The member entity is the identity top-card. The parser reads every stable,
-legitimately available field and ignores the rest of the large payload:
+The member entity is the identity top-card. The parser reads the stable,
+legitimately available fields and ignores the rest of the payload:
 
 - Name (`firstName`, `lastName`), `headline`, `summary`, and the primary locale
-  (`primaryLocale` becomes `profile_language`, such as `en_US`).
+  (`primaryLocale` becomes `profile_language`, such as `en_US`), plus every
+  `supportedLocale`.
 - Profile and background pictures, each a `displayImage.vectorImage` with a root
-  URL and sized artifacts. Every artifact becomes an image variant (width,
-  height, url) ordered smallest to largest, and the largest is also the primary
-  `url`.
+  URL and sized artifacts. Every artifact becomes a variant (width, height, url)
+  ordered smallest to largest, and the largest is also the primary `url`.
 - `location.countryCode`, published `websites`, the creator's featured website
-  (`creatorInfo.creatorWebsite`), and the creator's associated topics
+  (`creatorInfo.creatorWebsite`), and creator topics
   (`creatorInfo.associatedHashtagUrns`, decoded to hashtag names).
 - Status flags: `verified`, `influencer`, `premium`, `creator`, `student`,
   `memorialized`, and `top_voice` (from the presence of `topVoiceBadge`).
+- `created`, the profile creation time, when present.
 
-An empty collection maps to a not-found result. A body that cannot be decoded
-maps to a parse error. Optional nested sections use pointers so a missing, null,
-or partial section is skipped rather than failing the profile. Optional fields
-are omitted when absent; the parser never invents values. Identity fields, the
-public identifier and canonical URL, come from the validated request, not the
-response body.
+Text fields are HTML-unescaped, because LinkedIn encodes entities such as `&amp;`
+in the raw values. Optional fields are omitted when absent; the parser never
+invents values. The public identifier and canonical URL come from the validated
+request, never from the response body, so the response can never redirect the
+service to another identity.
 
-### Profile sections
+## Profile sections
 
 The `q=memberIdentity` finder returns the top-card only. Detailed sections are
-retrieved separately, after the core profile, from LinkedIn's DASH REST API keyed
-by the profile URN (`entityUrn`) the top-card already returns:
+retrieved separately, after the core profile, from DASH resources keyed by the
+profile URN (`entityUrn`) the top-card already returns:
 
-    GET /voyager/api/identity/dash/profile{Section}?q=viewee&profileUrn={urn}
+    GET /voyager/api/identity/dash/{resource}?q=viewee&profileUrn={urn}
 
-sent with `Accept: application/vnd.linkedin.normalized+json+2.1`, which returns a
-normalized `data`/`included` document. The `data["*elements"]` array gives the
-ordered entity URNs; each is resolved from `included`, so LinkedIn's ordering is
+with `Accept: application/vnd.linkedin.normalized+json+2.1`, which returns a
+normalized `data`/`included` document. The `data["*elements"]` array holds the
+ordered entity URNs, each resolved from `included`, so LinkedIn's ordering is
 preserved. Supported sections and their resources:
 
 | Section | Resource |
@@ -125,16 +118,15 @@ preserved. Supported sections and their resources:
 | `projects` | `profileProjects` |
 | `test_scores` | `profileTestScores` |
 
-These calls are deterministic, one request per section, and use the same
-authenticated session and headers as the core call: no browser automation, no
-server-driven UI, and no ephemeral page tokens. Experience and education are
-fetched by default; the rest are enabled with `PROFILE_SECTIONS`. Enrichment is
-optional and failure-isolated: each section runs through the shared upstream gate
-(rate limit, breaker, concurrency), bounded by a global semaphore
-(`ENRICHMENT_CONCURRENCY`) and the overall `PROFILE_TIMEOUT`. Any error, timeout,
-or empty result is recorded in `meta.sections` (`ok`, `empty`, or `unavailable`)
-without affecting the core profile. The parser never fabricates values, and
-sections that would require server-driven UI or unstable tokens are not used.
+Each call is one deterministic request using the same session and headers as the
+core call. Company and school URLs are derived from the company and school URNs on
+each entity. Experience and education are fetched by default; the rest are enabled
+through `PROFILE_SECTIONS`. Enrichment is optional and failure-isolated: each
+section runs through the shared upstream gate (rate limit, breaker, concurrency),
+bounded by a global semaphore (`ENRICHMENT_CONCURRENCY`) and the overall
+`PROFILE_TIMEOUT`. Any error, timeout, or empty result is recorded in
+`meta.sections` as `ok`, `empty`, or `unavailable`, and never affects the core
+profile that was already assembled.
 
 ## Timeouts and retries
 
@@ -147,23 +139,21 @@ never retried. A 429 is surfaced with its `Retry-After` value.
 ## Session health
 
 Using one signed-in session from a server is inherently more fragile than a
-browser: LinkedIn can challenge or invalidate it. The client treats authentication
-and login-redirect responses as a likely session invalidation rather than a
-routine error. After a small number of them the circuit breaker marks the session
-unhealthy, stops issuing upstream requests, and stays open for a long cooldown that
-doubles on each failed probe, so a dead session is not hammered into deeper
-trouble. While the session is unhealthy, callers receive a controlled `503`.
+browser, because LinkedIn can challenge or invalidate it. The client treats
+authentication and login-redirect responses as a likely session invalidation
+rather than a routine error. After a small number of them a session breaker marks
+the session unhealthy, stops issuing upstream requests, and stays open for a
+cooldown that doubles on each failed probe, so a dead session is not hammered.
+While the session is unhealthy, callers receive a controlled `502` or `503`.
 `upstream_session_healthy` exposes the state, and it clears automatically once a
-probe succeeds after the cookies are refreshed. The service never tries to bypass a
-challenge or login wall.
+probe succeeds after the cookies are refreshed.
 
-Matching the browser `User-Agent` and session context (above) removes the most
-common cause of this invalidation. It cannot guarantee a session is never
-challenged: a server also differs from a browser in its network origin, and
-LinkedIn may still challenge a session used from a datacenter address. The service
-does not attempt to work around that. When it happens the session-health breaker
-detects it, stops further traffic, and surfaces the state, so the failure stays
-contained and is recoverable by refreshing the cookies.
+Matching the browser `User-Agent` removes the most common cause of invalidation.
+It cannot guarantee a session is never challenged: a server also differs from a
+browser in its network origin, and LinkedIn may still challenge a session used
+from a datacenter address. The service does not work around that. When it happens
+the session breaker detects it, stops further traffic, and surfaces the state, so
+the failure stays contained and is recoverable by refreshing the cookies.
 
 ## Volatility
 

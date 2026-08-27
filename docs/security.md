@@ -24,9 +24,11 @@ response cannot exhaust memory.
 
 `GET /v1/profile` is protected by API-key auth and two layers of rate limiting:
 per client IP and per API key. Keys are checked with a constant-time comparison.
-The per-IP limiter keys on the connection's remote address; behind a proxy that
-terminates client connections, preserve the client address if you need accurate
-per-client limits.
+The per-IP limiter keys on the connection's remote address by default. Behind a
+known number of trusted reverse proxies, set `TRUSTED_PROXY_DEPTH` so the client
+IP is read from `X-Forwarded-For`, counting entries from the right; a client
+cannot spoof its address that way because the trusted proxy always appends the
+real peer after anything the client sent.
 
 The API key authorizes access to this service and is distinct from the LinkedIn
 session credentials. The server's API key is never shipped to the browser: the

@@ -18,16 +18,14 @@
   rather than evading it. See [reverse-engineering.md](reverse-engineering.md#session-compatibility).
 - Only profile retrieval is implemented. There are no company, job, or search
   endpoints.
-- Rate limiting keys on the connection's remote address. Behind a proxy that
-  terminates client connections, per-IP limiting sees the proxy address unless the
-  proxy preserves the client IP.
+- Rate limiting keys on the connection's remote address by default. Behind a
+  reverse proxy, set `TRUSTED_PROXY_DEPTH` to the number of trusted hops so the
+  client IP is read from `X-Forwarded-For`; with the default of `0` per-IP
+  limiting sees the proxy address.
 - The rate, concurrency, and circuit-breaker limits and the audit store are per
   instance. The deployment runs a single replica by default so they stay
   authoritative for the one shared LinkedIn session; scaling out multiplies
   upstream pressure and splits the audit trail across replicas.
-- `APPLICATIONINSIGHTS_CONNECTION_STRING` is accepted and provisioned, but the app
-  does not export to Application Insights yet. Azure telemetry today is the
-  structured logs in Log Analytics.
 
 ## Profile section coverage
 
@@ -53,5 +51,4 @@ how it is retrieved.
 
 Optional sections are failure-isolated: `meta.sections` reports each attempted
 section as `ok`, `empty`, or `unavailable`, and any failure leaves the core
-profile intact. Sections that would require server-driven UI or unstable page
-tokens are not used, and the parser never fabricates values.
+profile intact. The parser never fabricates values.

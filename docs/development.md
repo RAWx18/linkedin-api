@@ -23,8 +23,7 @@ curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhg
 ```
 
 With no `API_KEYS` set, the API is open, which is fine for local work. Getting the
-session cookies is covered in
-[configuration.md](configuration.md#session-cookies).
+session cookies is covered in [session-cookies.md](session-cookies.md).
 
 ## Make targets
 

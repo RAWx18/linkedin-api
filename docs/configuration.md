@@ -15,6 +15,7 @@ template is in [.env.example](../.env.example).
 | `SERVER_WRITE_TIMEOUT` | `20s` | no | Response write timeout |
 | `SERVER_IDLE_TIMEOUT` | `90s` | no | Keep-alive idle timeout |
 | `SHUTDOWN_TIMEOUT` | `15s` | no | Graceful shutdown drain time |
+| `TRUSTED_PROXY_DEPTH` | `0` | no | Trusted reverse proxies in front of the service. `0` trusts only the connection's remote address; behind Azure Container Apps ingress set `1` so the client IP is read from `X-Forwarded-For` |
 | `LINKEDIN_LI_AT` | | production | `li_at` session cookie (secret) |
 | `LINKEDIN_JSESSIONID` | | production | `JSESSIONID` value (secret) |
 | `LINKEDIN_BASE_URL` | `https://www.linkedin.com` | no | Upstream base, must be a linkedin.com host |
@@ -55,19 +56,17 @@ template is in [.env.example](../.env.example).
 | `AUDIT_BATCH_SIZE` | `128` | no | Records per batched insert |
 | `AUDIT_FLUSH_INTERVAL` | `1s` | no | Maximum time a record waits before it is written |
 | `AUDIT_ADMIN_KEYS` | | no | Comma-separated keys for `/admin/usage`; empty disables the endpoint |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | | no | Passed through for Application Insights, exporter not wired yet |
 
 Production requires `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`, and `API_KEYS`.
 
 ## Session cookies
 
-`LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID` come from a browser session:
+`LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID` come from a browser signed in to
+LinkedIn, and `LINKEDIN_USER_AGENT` must be that browser's exact User-Agent. The
+step-by-step procedure, including where to find each value in devtools, is in
+[session-cookies.md](session-cookies.md).
 
-1. Sign in to LinkedIn in a browser.
-2. Open developer tools, then Application, Cookies, `https://www.linkedin.com`.
-3. Copy the `li_at` and `JSESSIONID` values.
-
-Treat both as passwords. Keep them in `.env` locally or in your deployment's
+Treat all three as passwords. Keep them in `.env` locally or in your deployment's
 secret store, and never commit them. They expire, so refresh them when upstream
 authentication starts returning `upstream_auth_failed`. How they are used is in
 [reverse-engineering.md](reverse-engineering.md#authentication).
