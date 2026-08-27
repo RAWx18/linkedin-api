@@ -36,7 +36,9 @@ fmt:
 lint:
 	gofmt -l .
 	go vet ./...
-	@command -v golangci-lint >/dev/null && golangci-lint run || echo "golangci-lint not installed, skipping"
+	@GCL="$$(command -v golangci-lint)"; \
+	[ -n "$$GCL" ] || GCL="$$(go env GOPATH)/bin/golangci-lint"; \
+	if [ -x "$$GCL" ]; then "$$GCL" run; else echo "golangci-lint not installed; run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0"; fi
 
 tidy:
 	go mod tidy

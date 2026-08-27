@@ -30,7 +30,7 @@ domain model. Details are in [docs/architecture.md](docs/architecture.md).
 
 ```bash
 cp .env.example .env
-# set LINKEDIN_LI_AT and LINKEDIN_JSESSIONID in .env
+# set LINKEDIN_LI_AT, LINKEDIN_JSESSIONID, and LINKEDIN_USER_AGENT in .env
 set -a && source .env && set +a
 make run
 ```
@@ -85,17 +85,3 @@ More targets are in [docs/development.md](docs/development.md).
 - [Auditing and usage](docs/auditing.md)
 - [Security](docs/security.md)
 - [Limitations](docs/limitations.md)
-
-## Known limitations
-
-- **Upstream volatility:** the internal API is undocumented; endpoint shapes can
-  change and temporarily reduce returned fields until the parser is updated.
-- **Profile coverage:** the response covers the member's identity and top-card
-  fields (name, headline, summary, location, pictures, websites, and status
-  badges), and reflects what the configured session can see.
-- **Rate limits:** LinkedIn rate limiting is respected, not circumvented; `429`
-  responses are surfaced with `Retry-After` and are not retried.
-- **Session lifetime:** `li_at`/`JSESSIONID` cookies expire; refresh them when
-  upstream authentication starts failing (`upstream_auth_failed`).
-- **Single profile scope:** only profile retrieval is implemented (no company,
-  job, or search endpoints), by design.

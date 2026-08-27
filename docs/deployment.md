@@ -51,7 +51,8 @@ Two workflows live in [.github/workflows](../.github/workflows):
   pushes the image to ACR, and rolls out the Container App.
 
 Set these repository secrets for deployment: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-`AZURE_SUBSCRIPTION_ID`, `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`, and `API_KEYS`.
+`AZURE_SUBSCRIPTION_ID`, `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`,
+`LINKEDIN_USER_AGENT`, and `API_KEYS`.
 Then run the Deploy workflow with a resource group name.
 
 ## Manual deploy
@@ -63,6 +64,7 @@ az deployment group create \
   -f deploy/bicep/main.bicep \
   -p linkedInLiAt="$LINKEDIN_LI_AT" \
      linkedInJSessionID="$LINKEDIN_JSESSIONID" \
+     linkedInUserAgent="$LINKEDIN_USER_AGENT" \
      apiKeys="$API_KEYS"
 # build and push the image to the new ACR, then point the app at it
 az containerapp update -g linkedin-api-rg -n linkedinapi-app --image <acr>/linkedin-api:<tag>

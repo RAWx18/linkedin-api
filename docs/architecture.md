@@ -32,7 +32,7 @@ HTTP request
 | --- | --- |
 | `cmd/server` | Entrypoint: load config, build dependencies, run the server, handle graceful shutdown. |
 | `internal/api` | Routing, middleware (request ID, logging, metrics, recovery, rate limit, API key, audit), error to HTTP mapping, JSON responses. |
-| `internal/service` | Coordinates a lookup: cache, coalesce, gate, fetch, parse, enrich, cache. Declares the interfaces it depends on. |
+| `internal/service` | Coordinates a lookup: cache, coalesce, gate, fetch, parse, cache. Declares the interfaces it depends on. |
 | `internal/upstream` | The gate in front of LinkedIn: aggregate rate limit, concurrency ceiling, and circuit breaker. |
 | `internal/audit` | Durable, privacy-safe request history: async batched writer, SQLite store, retention, and usage queries. |
 | `internal/linkedin` | Voyager HTTP client, session, endpoint builders, upstream error classification, bounded retries. |

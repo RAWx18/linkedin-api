@@ -10,7 +10,7 @@
 
 ```bash
 cp .env.example .env
-# set LINKEDIN_LI_AT and LINKEDIN_JSESSIONID in .env
+# set LINKEDIN_LI_AT, LINKEDIN_JSESSIONID, and LINKEDIN_USER_AGENT in .env
 set -a && source .env && set +a
 make run
 ```
@@ -48,11 +48,13 @@ The suite is deterministic and needs no network or LinkedIn account. It covers U
 validation, the parser against a sanitized fixture in
 [../internal/linkedin/parse/testdata](../internal/linkedin/parse/testdata), the
 client against an `httptest` server (success, auth failure, login redirect, not
-found, rate limit, retried 5xx, timeout, and an oversized-body cap), the service
-with a mock client including cache, negative cache, coalescing, and gate
-rejection, the upstream guard including circuit breaking and session health, the
-API layer for routing, validation, auth, rate limiting, and error mapping, and
-the audit, cache, and config packages. The parser also has a benchmark.
+found, rate limit, retried 5xx, timeout, an oversized-body cap, and deterministic
+request headers), the service with a mock client including cache, negative cache,
+coalescing, gate rejection, and caller-session isolation, the upstream guard
+including circuit breaking and server and caller session health, the API layer
+for routing, validation, auth, rate limiting, caller credential headers, and
+error mapping, and the audit, cache, and config packages. The parser also has a
+benchmark.
 
 ## UI
 
