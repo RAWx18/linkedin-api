@@ -87,9 +87,20 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
   return node;
 }
 
-function link(url: string, label: string): HTMLAnchorElement {
+function safeURL(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function link(url: string, label: string): HTMLElement {
+  const href = safeURL(url);
+  if (!href) return el('span', 'invalid-link', label);
   const a = el('a', undefined, label);
-  a.href = url;
+  a.href = href;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
   return a;
@@ -99,6 +110,15 @@ function section(title: string, ...children: Node[]): HTMLElement {
   const block = el('section', 'panel');
   block.append(el('h3', undefined, title), ...children);
   return block;
+}
+
+function collection(title: string, count: number, content: Node, open = false): HTMLDetailsElement {
+  const panel = el('details', 'panel collection-panel');
+  panel.open = open;
+  const summary = el('summary');
+  summary.append(el('span', 'section-title', title), el('span', 'section-count', `${count}`));
+  panel.append(summary, content);
+  return panel;
 }
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -137,7 +157,11 @@ function entry(o: { title?: string; titleUrl?: string; sub?: string; subUrl?: st
     item.append(s);
   }
   if (o.meta) item.append(el('div', 'entry-meta', o.meta));
-  if (o.body) item.append(el('p', 'entry-body', o.body));
+  if (o.body) {
+    const description = el('details', 'entry-description');
+    description.append(el('summary', undefined, 'Description'), el('p', 'entry-body', o.body));
+    item.append(description);
+  }
   return item;
 }
 
@@ -147,12 +171,14 @@ function entries(items: HTMLElement[]): HTMLElement {
   return box;
 }
 function imageItem(label: string, image: NonNullable<Profile['profile_picture']>): HTMLElement {
+  const href = safeURL(image.url);
+  if (!href) return el('span', 'invalid-link', label);
   const item = el('a', 'image-item');
-  item.href = image.url;
+  item.href = href;
   item.target = '_blank';
   item.rel = 'noopener noreferrer';
   const preview = el('img');
-  preview.src = image.url;
+  preview.src = href;
   preview.alt = `${label} preview`;
   preview.loading = 'lazy';
   const copy = el('span');
@@ -163,9 +189,10 @@ function imageItem(label: string, image: NonNullable<Profile['profile_picture']>
 }
 
 function jsonViewer(raw: string): HTMLElement {
-  const block = el('section', 'block json-block');
+  const block = el('details', 'panel json-block');
   const bar = el('div', 'json-bar');
-  bar.append(el('h3', undefined, 'JSON response'));
+  const summary = el('summary');
+  summary.append(el('span', 'section-title', 'JSON response'));
   const copy = el('button', 'copy-btn', 'Copy JSON');
   copy.type = 'button';
   copy.addEventListener('click', async () => {
@@ -188,7 +215,7 @@ function jsonViewer(raw: string): HTMLElement {
   } catch {
     /* show the body as-is */
   }
-  block.append(bar, el('pre', 'json-pre', pretty));
+  block.append(summary, bar, el('pre', 'json-pre', pretty));
   return block;
 }
 
@@ -198,10 +225,11 @@ function renderProfile(result: ProfileResult, raw: string): void {
   output.className = 'output result-grid';
   const card = el('article', 'profile-card');
 
-  if (data.background_image?.url) {
+  const backgroundURL = data.background_image?.url ? safeURL(data.background_image.url) : undefined;
+  if (backgroundURL) {
     const banner = el('div', 'banner');
     const img = el('img');
-    img.src = data.background_image.url;
+    img.src = backgroundURL;
     img.alt = '';
     img.loading = 'lazy';
     banner.append(img);
@@ -209,9 +237,10 @@ function renderProfile(result: ProfileResult, raw: string): void {
   }
 
   const head = el('div', 'card-head');
-  if (data.profile_picture?.url) {
+  const profilePictureURL = data.profile_picture?.url ? safeURL(data.profile_picture.url) : undefined;
+  if (profilePictureURL) {
     const avatar = el('img', 'avatar');
-    avatar.src = data.profile_picture.url;
+    avatar.src = profilePictureURL;
     avatar.alt = data.full_name ?? data.public_identifier;
     head.append(avatar);
   }
@@ -246,18 +275,22 @@ function renderProfile(result: ProfileResult, raw: string): void {
     card.append(about);
   }
 
+  output.append(card);
+  const main = el('div', 'main-stack');
+  const side = el('aside', 'side-stack');
+
   if (data.experience?.length) {
-    card.append(section('Experience', entries(data.experience.map((e) => entry({
+    main.append(collection('Experience', data.experience.length, entries(data.experience.map((e) => entry({
       title: e.title,
       sub: e.company,
       subUrl: e.company_url,
       meta: joinMeta(fmtRange(e.date_range), e.location),
       body: e.description,
-    })))));
+    }))), true));
   }
 
   if (data.education?.length) {
-    card.append(section('Education', entries(data.education.map((e) => entry({
+    side.append(collection('Education', data.education.length, entries(data.education.map((e) => entry({
       title: e.school,
       titleUrl: e.school_url,
       sub: joinMeta(e.degree, e.field_of_study),
@@ -268,12 +301,12 @@ function renderProfile(result: ProfileResult, raw: string): void {
 
   if (data.skills?.length) {
     const chips = el('div', 'chip-row');
-    for (const s of data.skills) chips.append(el('span', 'badge', s));
-    card.append(section('Skills', chips));
+    for (const skill of data.skills) chips.append(el('span', 'tag', skill));
+    side.append(collection('Skills', data.skills.length, chips));
   }
 
   if (data.certifications?.length) {
-    card.append(section('Certifications', entries(data.certifications.map((c) => entry({
+    side.append(collection('Certifications', data.certifications.length, entries(data.certifications.map((c) => entry({
       title: c.name,
       titleUrl: c.url,
       sub: c.authority,
@@ -283,14 +316,14 @@ function renderProfile(result: ProfileResult, raw: string): void {
   }
 
   if (data.languages?.length) {
-    card.append(section('Languages', entries(data.languages.map((l) => entry({
+    side.append(collection('Languages', data.languages.length, entries(data.languages.map((l) => entry({
       title: l.name,
       meta: humanize(l.proficiency),
     })))));
   }
 
   if (data.volunteer_experience?.length) {
-    card.append(section('Volunteer experience', entries(data.volunteer_experience.map((v) => entry({
+    main.append(collection('Volunteer experience', data.volunteer_experience.length, entries(data.volunteer_experience.map((v) => entry({
       title: v.role,
       sub: v.organization,
       subUrl: v.organization_url,
@@ -300,7 +333,7 @@ function renderProfile(result: ProfileResult, raw: string): void {
   }
 
   if (data.projects?.length) {
-    card.append(section('Projects', entries(data.projects.map((p) => entry({
+    main.append(collection('Projects', data.projects.length, entries(data.projects.map((p) => entry({
       title: p.title,
       meta: fmtRange(p.date_range),
       body: p.description,
@@ -308,18 +341,13 @@ function renderProfile(result: ProfileResult, raw: string): void {
   }
 
   if (data.test_scores?.length) {
-    card.append(section('Test scores', entries(data.test_scores.map((t) => entry({
+    side.append(collection('Test scores', data.test_scores.length, entries(data.test_scores.map((t) => entry({
       title: t.name,
       sub: t.score,
       meta: fmtDate(t.date),
       body: t.description,
     })))));
   }
-
-  const primary = el('div', 'primary-stack');
-  primary.append(card, jsonViewer(raw));
-  output.append(primary);
-  const side = el('aside', 'side-stack');
 
   if (data.websites?.length || data.creator_website) {
     const list = el('ul', 'link-list');
@@ -334,20 +362,20 @@ function renderProfile(result: ProfileResult, raw: string): void {
       item.append(link(data.creator_website, data.creator_website), el('span', 'muted', ' creator'));
       list.append(item);
     }
-    side.append(section('Links', list));
+    side.append(collection('Links', list.childElementCount, list));
   }
 
   if (data.topics?.length) {
     const chips = el('div', 'chip-row');
-    for (const t of data.topics) chips.append(el('span', 'badge', `#${t}`));
-    side.append(section('Topics', chips));
+    for (const topic of data.topics) chips.append(el('span', 'tag', `#${topic}`));
+    side.append(collection('Topics', data.topics.length, chips));
   }
 
   if (data.profile_picture || data.background_image) {
     const images = el('div', 'image-list');
     if (data.profile_picture) images.append(imageItem('Profile image', data.profile_picture));
     if (data.background_image) images.append(imageItem('Background image', data.background_image));
-    side.append(section('Images', images));
+    side.append(collection('Images', images.childElementCount, images));
   }
 
   const metaRow = el('div', 'meta-row');
@@ -361,12 +389,22 @@ function renderProfile(result: ProfileResult, raw: string): void {
   if (data.supported_locales?.length) rows.push(['locales', data.supported_locales.join(', ')]);
   if (data.created_at) rows.push(['created', new Date(data.created_at).toLocaleDateString()]);
   for (const [term, value] of rows) {
-    const chip = el('span', 'meta-chip');
-    chip.append(el('span', 'k', term), el('span', 'v', value));
-    metaRow.append(chip);
+    const row = el('div', 'meta-item');
+    row.append(el('span', 'k', term), el('span', 'v', value));
+    metaRow.append(row);
   }
-  side.append(section('Metadata', metaRow));
+  side.append(collection('Metadata', rows.length, metaRow));
+
+  const unavailable = Object.entries(meta.sections ?? {})
+    .filter(([, status]) => status === 'unavailable')
+    .map(([name]) => humanize(name));
+  if (unavailable.length) {
+    side.prepend(section('Partial data', el('p', 'notice', `${unavailable.join(', ')} unavailable for this lookup.`)));
+  }
+
+  if (main.childElementCount) output.append(main);
   output.append(side);
+  output.append(jsonViewer(raw));
 }
 
 function renderError(raw: string): void {
