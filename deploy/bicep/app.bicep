@@ -36,7 +36,6 @@ param apiKeys string
 param auditAdminKeys string = ''
 
 var acrName = toLower('${namePrefix}acr${uniqueString(resourceGroup().id)}')
-var appInsightsName = '${namePrefix}-ai'
 var envName = '${namePrefix}-env'
 var appName = '${namePrefix}-app'
 var identityName = '${namePrefix}-id'
@@ -53,10 +52,6 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existin
 
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
-}
-
-resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
-  name: appInsightsName
 }
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
@@ -95,10 +90,6 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'api-keys'
           value: apiKeys
-        }
-        {
-          name: 'appinsights-connection'
-          value: appInsights.properties.ConnectionString
         }
       ], empty(auditAdminKeys) ? [] : [
         {
@@ -152,10 +143,6 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'API_KEYS'
               secretRef: 'api-keys'
-            }
-            {
-              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-              secretRef: 'appinsights-connection'
             }
             {
               name: 'AUDIT_ENABLED'

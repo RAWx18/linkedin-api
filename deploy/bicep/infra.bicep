@@ -9,7 +9,6 @@ param namePrefix string = 'linkedinapi'
 
 var acrName = toLower('${namePrefix}acr${uniqueString(resourceGroup().id)}')
 var logsName = '${namePrefix}-logs'
-var appInsightsName = '${namePrefix}-ai'
 var envName = '${namePrefix}-env'
 var identityName = '${namePrefix}-id'
 var storageName = take(toLower('${namePrefix}st${uniqueString(resourceGroup().id)}'), 24)
@@ -25,16 +24,6 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 30
-  }
-}
-
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: appInsightsName
-  location: location
-  kind: 'web'
-  properties: {
-    Application_Type: 'web'
-    WorkspaceResourceId: logs.id
   }
 }
 

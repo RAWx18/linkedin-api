@@ -106,8 +106,7 @@ type LogConfig struct {
 }
 
 type MetricsConfig struct {
-	Enabled                     bool
-	AppInsightsConnectionString string
+	Enabled bool
 }
 
 // Load reads configuration from the environment, applies development-friendly
@@ -174,8 +173,7 @@ func Load() (*Config, error) {
 			Format: getEnv("LOG_FORMAT", "json"),
 		},
 		Metrics: MetricsConfig{
-			Enabled:                     getEnvBool("METRICS_ENABLED", true),
-			AppInsightsConnectionString: getEnv("APPLICATIONINSIGHTS_CONNECTION_STRING", ""),
+			Enabled: getEnvBool("METRICS_ENABLED", true),
 		},
 	}
 	if err := c.Validate(); err != nil {
