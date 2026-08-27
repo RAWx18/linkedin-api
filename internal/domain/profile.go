@@ -7,7 +7,7 @@ import "time"
 
 // SchemaVersion identifies the shape of the public profile response. Bump it
 // whenever the response contract changes in a backward-incompatible way.
-const SchemaVersion = "2.0"
+const SchemaVersion = "2.1"
 
 // Profile is the normalized, transport-independent representation of a LinkedIn
 // profile. Optional scalars use pointers and collections are nil when absent so
@@ -20,13 +20,20 @@ type Profile struct {
 	FullName         string    `json:"full_name,omitempty"`
 	Headline         string    `json:"headline,omitempty"`
 	Summary          *string   `json:"summary,omitempty"`
+	ProfileLanguage  string    `json:"profile_language,omitempty"`
 	Location         *Location `json:"location,omitempty"`
 	ProfilePicture   *Image    `json:"profile_picture,omitempty"`
 	BackgroundImage  *Image    `json:"background_image,omitempty"`
 	Websites         []Website `json:"websites,omitempty"`
+	CreatorWebsite   string    `json:"creator_website,omitempty"`
+	Topics           []string  `json:"topics,omitempty"`
 	Verified         bool      `json:"verified,omitempty"`
 	Influencer       bool      `json:"influencer,omitempty"`
 	Premium          bool      `json:"premium,omitempty"`
+	Creator          bool      `json:"creator,omitempty"`
+	TopVoice         bool      `json:"top_voice,omitempty"`
+	Student          bool      `json:"student,omitempty"`
+	Memorialized     bool      `json:"memorialized,omitempty"`
 }
 
 // Location is a resolved place. The base profile exposes the country code; the
@@ -36,9 +43,18 @@ type Location struct {
 	Text        string `json:"text,omitempty"`
 }
 
-// Image holds the highest-resolution URL resolved from LinkedIn's vector assets.
+// Image holds the highest-resolution URL plus every sized variant the source
+// exposes, ordered from smallest to largest.
 type Image struct {
-	URL string `json:"url"`
+	URL      string         `json:"url"`
+	Variants []ImageVariant `json:"variants,omitempty"`
+}
+
+// ImageVariant is one sized rendition of an image asset.
+type ImageVariant struct {
+	Width  int    `json:"width"`
+	Height int    `json:"height,omitempty"`
+	URL    string `json:"url"`
 }
 
 // Website is a link the member publishes on their profile.

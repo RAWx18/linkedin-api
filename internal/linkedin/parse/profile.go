@@ -25,11 +25,19 @@ type dashProfile struct {
 	Summary           string        `json:"summary"`
 	Premium           bool          `json:"premium"`
 	Influencer        bool          `json:"influencer"`
+	Creator           bool          `json:"creator"`
+	Student           bool          `json:"student"`
+	Memorialized      bool          `json:"memorialized"`
 	ProfilePicture    *dashPhoto    `json:"profilePicture"`
 	BackgroundPicture *dashPhoto    `json:"backgroundPicture"`
 	Location          *dashLocation `json:"location"`
 	Websites          []dashWebsite `json:"websites"`
-	VerificationData  *struct {
+	PrimaryLocale     *dashLocale   `json:"primaryLocale"`
+	CreatorInfo       *dashCreator  `json:"creatorInfo"`
+	TopVoiceBadge     *struct {
+		BadgeText string `json:"badgeText"`
+	} `json:"topVoiceBadge"`
+	VerificationData *struct {
 		VerificationState *struct {
 			Verified json.RawMessage `json:"verified"`
 		} `json:"verificationState"`
@@ -45,6 +53,18 @@ type dashWebsite struct {
 	Category string `json:"category"`
 }
 
+type dashLocale struct {
+	Country  string `json:"country"`
+	Language string `json:"language"`
+}
+
+type dashCreator struct {
+	CreatorWebsite *struct {
+		Text string `json:"text"`
+	} `json:"creatorWebsite"`
+	AssociatedHashtagUrns []string `json:"associatedHashtagUrns"`
+}
+
 // dashPhoto wraps the vector image the profile and background pictures share.
 type dashPhoto struct {
 	DisplayImage *struct {
@@ -56,7 +76,7 @@ func (d *dashPhoto) image() *domain.Image {
 	if d == nil || d.DisplayImage == nil {
 		return nil
 	}
-	return d.DisplayImage.VectorImage.largest()
+	return d.DisplayImage.VectorImage.image()
 }
 
 // Profile normalizes a DASH profiles response (q=memberIdentity) into the domain
@@ -79,13 +99,20 @@ func Profile(raw json.RawMessage, ref urlx.ProfileRef) (*domain.Profile, error) 
 		FullName:         strings.TrimSpace(e.FirstName + " " + e.LastName),
 		Headline:         e.Headline,
 		Summary:          strPtr(e.Summary),
+		ProfileLanguage:  e.language(),
 		Premium:          e.Premium,
 		Influencer:       e.Influencer,
+		Creator:          e.Creator,
+		TopVoice:         e.TopVoiceBadge != nil,
+		Student:          e.Student,
+		Memorialized:     e.Memorialized,
 		Verified:         e.verified(),
 		ProfilePicture:   e.ProfilePicture.image(),
 		BackgroundImage:  e.BackgroundPicture.image(),
 		Location:         e.location(),
 		Websites:         e.sites(),
+		CreatorWebsite:   e.creatorWebsite(),
+		Topics:           e.topics(),
 	}, nil
 }
 
@@ -120,4 +147,66 @@ func (e dashProfile) sites() []domain.Website {
 		return nil
 	}
 	return out
+}
+
+// language builds the primary locale as language_COUNTRY, or just the language.
+func (e dashProfile) language() string {
+	if e.PrimaryLocale == nil {
+		return ""
+	}
+	lang := strings.TrimSpace(e.PrimaryLocale.Language)
+	if lang == "" {
+		return ""
+	}
+	if country := strings.TrimSpace(e.PrimaryLocale.Country); country != "" {
+		return lang + "_" + country
+	}
+	return lang
+}
+
+// creatorWebsite returns the featured creator link when present.
+func (e dashProfile) creatorWebsite() string {
+	if e.CreatorInfo == nil || e.CreatorInfo.CreatorWebsite == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.CreatorInfo.CreatorWebsite.Text)
+}
+
+// topics extracts the distinct hashtag names a creator is associated with,
+// preserving order and dropping duplicates and malformed urns.
+func (e dashProfile) topics() []string {
+	if e.CreatorInfo == nil || len(e.CreatorInfo.AssociatedHashtagUrns) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(e.CreatorInfo.AssociatedHashtagUrns))
+	out := make([]string, 0, len(e.CreatorInfo.AssociatedHashtagUrns))
+	for _, urn := range e.CreatorInfo.AssociatedHashtagUrns {
+		name := hashtagName(urn)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// hashtagName extracts the tag from a hashtag urn of the form
+// urn:li:fsd_hashtag:(name,urn:li:activity:-).
+func hashtagName(urn string) string {
+	open := strings.IndexByte(urn, '(')
+	if open < 0 {
+		return ""
+	}
+	rest := urn[open+1:]
+	if end := strings.IndexAny(rest, ",)"); end >= 0 {
+		rest = rest[:end]
+	}
+	return strings.TrimSpace(rest)
 }

@@ -3,33 +3,47 @@
 
 package parse
 
-import "github.com/garudexlabs/linkedin-api/internal/domain"
+import (
+	"sort"
+
+	"github.com/garudexlabs/linkedin-api/internal/domain"
+)
 
 // vectorImage models a LinkedIn image asset: a root URL plus sized artifacts.
 type vectorImage struct {
-	RootURL   string `json:"rootUrl"`
-	Artifacts []struct {
-		Width                         int    `json:"width"`
-		FileIdentifyingURLPathSegment string `json:"fileIdentifyingUrlPathSegment"`
-	} `json:"artifacts"`
+	RootURL   string     `json:"rootUrl"`
+	Artifacts []artifact `json:"artifacts"`
 }
 
-// largest resolves the highest-resolution image URL, or nil when unavailable. A
-// nil receiver is tolerated so callers can pass optional fields directly.
-func (v *vectorImage) largest() *domain.Image {
+type artifact struct {
+	Width                         int    `json:"width"`
+	Height                        int    `json:"height"`
+	FileIdentifyingURLPathSegment string `json:"fileIdentifyingUrlPathSegment"`
+}
+
+// image resolves the domain image: every usable sized variant ordered from
+// smallest to largest, with the largest also exposed as the primary URL. A nil
+// receiver is tolerated so callers can pass optional fields directly.
+func (v *vectorImage) image() *domain.Image {
 	if v == nil || v.RootURL == "" || len(v.Artifacts) == 0 {
 		return nil
 	}
-	best := v.Artifacts[0]
-	for _, a := range v.Artifacts[1:] {
-		if a.Width > best.Width {
-			best = a
+	variants := make([]domain.ImageVariant, 0, len(v.Artifacts))
+	for _, a := range v.Artifacts {
+		if a.Width <= 0 || a.FileIdentifyingURLPathSegment == "" {
+			continue
 		}
+		variants = append(variants, domain.ImageVariant{
+			Width:  a.Width,
+			Height: a.Height,
+			URL:    v.RootURL + a.FileIdentifyingURLPathSegment,
+		})
 	}
-	if best.FileIdentifyingURLPathSegment == "" {
+	if len(variants) == 0 {
 		return nil
 	}
-	return &domain.Image{URL: v.RootURL + best.FileIdentifyingURLPathSegment}
+	sort.Slice(variants, func(i, j int) bool { return variants[i].Width < variants[j].Width })
+	return &domain.Image{URL: variants[len(variants)-1].URL, Variants: variants}
 }
 
 // strPtr returns nil for empty strings so optional fields stay absent.
