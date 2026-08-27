@@ -21,6 +21,10 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      RG: ${{ github.event.inputs.resourceGroup }}
+      LOCATION: ${{ github.event.inputs.location }}
+      IMAGE_TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,42 +35,60 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Ensure Container Apps CLI extension
-        run: az extension add --name containerapp --upgrade
-
       - name: Ensure resource group
-        run: az group create --name "${{ github.event.inputs.resourceGroup }}" --location "${{ github.event.inputs.location }}"
+        run: az group create --name "$RG" --location "$LOCATION"
 
+      # Registry, user-assigned identity (with AcrPull), environment, logs and
+      # storage. The identity holds AcrPull before the app exists so the first app
+      # deploy can pull the image without a bootstrap deadlock.
       - name: Provision infrastructure
         id: infra
-        uses: azure/arm-deploy@v2
-        with:
-          scope: resourcegroup
-          resourceGroupName: ${{ github.event.inputs.resourceGroup }}
-          template: deploy/bicep/main.bicep
-          parameters: >-
-            linkedInLiAt=${{ secrets.LINKEDIN_LI_AT }}
-            linkedInJSessionID=${{ secrets.LINKEDIN_JSESSIONID }}
-            linkedInUserAgent=${{ secrets.LINKEDIN_USER_AGENT }}
-            apiKeys=${{ secrets.API_KEYS }}
-
-      - name: Build and push image
-        env:
-          ACR_NAME: ${{ steps.infra.outputs.acrName }}
-          ACR_SERVER: ${{ steps.infra.outputs.acrLoginServer }}
         run: |
-          az acr login --name "$ACR_NAME"
-          IMAGE="$ACR_SERVER/linkedin-api:${{ github.sha }}"
-          docker build -f deploy/Dockerfile -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          outputs=$(az deployment group create \
+            --resource-group "$RG" \
+            --name "infra-$IMAGE_TAG" \
+            --template-file deploy/bicep/infra.bicep \
+            --query properties.outputs -o json)
+          echo "acrName=$(echo "$outputs" | jq -r .acrName.value)" >> "$GITHUB_OUTPUT"
+          echo "acrLoginServer=$(echo "$outputs" | jq -r .acrLoginServer.value)" >> "$GITHUB_OUTPUT"
 
-      - name: Roll out new image
+      # Build the image inside ACR so the runner needs no local Docker or push
+      # credentials. The build context honours .dockerignore, so no secrets ship.
+      - name: Build image in ACR
+        id: build
         run: |
-          az containerapp update \
-            --name "${{ steps.infra.outputs.appName }}" \
-            --resource-group "${{ github.event.inputs.resourceGroup }}" \
-            --image "$IMAGE"
+          az acr build \
+            --registry "${{ steps.infra.outputs.acrName }}" \
+            --image "linkedin-api:$IMAGE_TAG" \
+            --file deploy/Dockerfile .
+          echo "image=${{ steps.infra.outputs.acrLoginServer }}/linkedin-api:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Output public URL
-        run: echo "Deployed to ${{ steps.infra.outputs.appUrl }}"
+      - name: Deploy application
+        id: app
+        run: |
+          url=$(az deployment group create \
+            --resource-group "$RG" \
+            --name "app-$IMAGE_TAG" \
+            --template-file deploy/bicep/app.bicep \
+            --parameters \
+              containerImage="${{ steps.build.outputs.image }}" \
+              linkedInLiAt="${{ secrets.LINKEDIN_LI_AT }}" \
+              linkedInJSessionID="${{ secrets.LINKEDIN_JSESSIONID }}" \
+              linkedInUserAgent="${{ secrets.LINKEDIN_USER_AGENT }}" \
+              apiKeys="${{ secrets.API_KEYS }}" \
+            --query properties.outputs.appUrl.value -o tsv)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+
+      # Verify the public endpoint answers. Tolerates cold-start activation, which
+      # can briefly return non-200 while the first replica spins up from zero.
+      - name: Smoke test
+        run: |
+          url="${{ steps.app.outputs.url }}"
+          for i in $(seq 1 24); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url/healthz" || true)
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then echo "healthy: $url"; exit 0; fi
+            sleep 5
+          done
+          echo "health check did not reach 200"; exit 1

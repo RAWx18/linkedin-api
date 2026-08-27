@@ -21,12 +21,17 @@ with the UI embedded, and the result ships on a distroless non-root base.
 
 ## Azure infrastructure
 
-[deploy/bicep/main.bicep](../deploy/bicep/main.bicep) provisions a Container Apps
-environment and app, an Azure Container Registry, a Log Analytics workspace, and
-Application Insights. The app runs with a system-assigned identity that has
-`AcrPull` on the registry, external ingress on port 8080, and liveness and
-readiness probes wired to `/healthz` and `/readyz`. Secrets are passed at deploy
-time and stored as Container App secrets, never in the repository.
+The Bicep is split so an automated first deploy never deadlocks.
+[deploy/bicep/infra.bicep](../deploy/bicep/infra.bicep) provisions the Azure
+Container Registry, a user-assigned identity granted `AcrPull` on the registry, a
+Container Apps environment, a Log Analytics workspace, and Application Insights.
+[deploy/bicep/app.bicep](../deploy/bicep/app.bicep) then deploys the Container App
+against an image that already exists in the registry. The app pulls with the
+user-assigned identity, which holds `AcrPull` before the app is created, so it
+never waits on a role assignment that depends on itself. Ingress is external on
+port 8080 with liveness and readiness probes wired to `/healthz` and `/readyz`.
+Secrets are passed at deploy time and stored as Container App secrets, never in
+the repository.
 
 A storage account with an Azure Files share is provisioned for the durable audit
 store and mounted at `/data`, so request history survives restarts and redeploys.
@@ -47,8 +52,9 @@ Two workflows live in [.github/workflows](../.github/workflows):
 - `ci.yml` runs formatting checks, `go vet`, the race test suite,
   `golangci-lint`, the UI build, and a Docker build on every push and pull
   request.
-- `deploy.yml` logs in to Azure with OIDC, deploys the Bicep template, builds and
-  pushes the image to ACR, and rolls out the Container App.
+- `deploy.yml` logs in to Azure with OIDC, provisions `infra.bicep`, builds the
+  image inside ACR with `az acr build`, deploys `app.bicep` against that image,
+  and smoke-tests the public `/healthz` endpoint.
 
 Set these repository secrets for deployment: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`,
@@ -57,17 +63,28 @@ Then run the Deploy workflow with a resource group name.
 
 ## Manual deploy
 
+Deploy the infrastructure, build the image into the new registry, then deploy the
+app against that image:
+
 ```bash
 az group create -n linkedin-api-rg -l eastus
-az deployment group create \
-  -g linkedin-api-rg \
-  -f deploy/bicep/main.bicep \
-  -p linkedInLiAt="$LINKEDIN_LI_AT" \
+
+# 1. Infrastructure: registry, identity + AcrPull, environment, logs, storage.
+acr=$(az deployment group create -g linkedin-api-rg \
+  -f deploy/bicep/infra.bicep \
+  --query properties.outputs.acrName.value -o tsv)
+
+# 2. Build the image inside the registry.
+az acr build --registry "$acr" --image linkedin-api:v1 -f deploy/Dockerfile .
+
+# 3. Application, using the freshly built image.
+az deployment group create -g linkedin-api-rg \
+  -f deploy/bicep/app.bicep \
+  -p containerImage="$acr.azurecr.io/linkedin-api:v1" \
+     linkedInLiAt="$LINKEDIN_LI_AT" \
      linkedInJSessionID="$LINKEDIN_JSESSIONID" \
      linkedInUserAgent="$LINKEDIN_USER_AGENT" \
      apiKeys="$API_KEYS"
-# build and push the image to the new ACR, then point the app at it
-az containerapp update -g linkedin-api-rg -n linkedinapi-app --image <acr>/linkedin-api:<tag>
 ```
 
 Verify the deployment:
