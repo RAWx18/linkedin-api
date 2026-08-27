@@ -65,7 +65,7 @@ func TestFetchProfileSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	raw, err := newTestClient(srv.URL, 2*time.Second, 2).FetchProfile(context.Background(), "ada")
+	raw, err := newTestClient(srv.URL, 2*time.Second, 2).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestFetchAuthFailureNoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 2*time.Second, 3).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 2*time.Second, 3).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	assertCode(t, err, domain.CodeUpstreamAuthFailed)
 	if n := atomic.LoadInt32(&hits); n != 1 {
 		t.Errorf("auth failures must not retry, hits = %d", n)
@@ -98,7 +98,7 @@ func TestFetchNotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 2*time.Second, 2).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 2*time.Second, 2).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	assertCode(t, err, domain.CodeProfileNotFound)
 }
 
@@ -111,7 +111,7 @@ func TestFetchRateLimitedNoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 2*time.Second, 3).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 2*time.Second, 3).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	de, ok := domain.AsError(err)
 	if !ok || de.Code != domain.CodeUpstreamRateLimited {
 		t.Fatalf("code = %v", err)
@@ -132,7 +132,7 @@ func TestFetchServerErrorRetries(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 2*time.Second, 2).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 2*time.Second, 2).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	assertCode(t, err, domain.CodeUpstreamUnavailable)
 	if n := atomic.LoadInt32(&hits); n != 3 {
 		t.Errorf("expected 3 attempts (1 + 2 retries), got %d", n)
@@ -146,7 +146,7 @@ func TestFetchTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 50*time.Millisecond, 0).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 50*time.Millisecond, 0).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	assertCode(t, err, domain.CodeUpstreamTimeout)
 }
 
@@ -157,7 +157,7 @@ func TestFetchReturnsRawBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	raw, err := newTestClient(srv.URL, time.Second, 0).FetchProfile(context.Background(), "ada")
+	raw, err := newTestClient(srv.URL, time.Second, 0).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestFetchRejectsOversizedBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 5*time.Second, 0).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 5*time.Second, 0).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	assertCode(t, err, domain.CodeUpstreamParseError)
 }
 
@@ -196,7 +196,7 @@ func TestFetchRedirectTreatedAsAuthFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := newTestClient(srv.URL, 2*time.Second, 3).FetchProfile(context.Background(), "ada")
+	_, err := newTestClient(srv.URL, 2*time.Second, 3).FetchProfile(context.Background(), "ada", linkedin.ServerCredential())
 	assertCode(t, err, domain.CodeUpstreamAuthFailed)
 	if n := atomic.LoadInt32(&hits); n != 1 {
 		t.Errorf("redirect must not be followed or retried, hits = %d", n)
