@@ -20,13 +20,16 @@ paths:
       summary: Fetch a normalized LinkedIn profile
       operationId: getProfile
       description: >
-        Returns a normalized profile. By default the request uses the
-        server-configured LinkedIn session. A caller may optionally supply its own
-        LinkedIn session through the X-LinkedIn-Li-At and X-LinkedIn-JSESSIONID
-        headers; when both are present the request uses only that caller session,
-        never the server session, and is not served from or written to the shared
-        cache. Caller credentials are used for the single request only and are
-        never stored, logged, traced, or cached.
+        Returns a normalized profile. Access is authorized by the X-API-Key header
+        when API_KEYS is configured; the co-hosted same-origin browser UI is exempt
+        so the server key never reaches the browser, while programmatic clients must
+        send it. By default the request uses the server-configured LinkedIn session.
+        A caller may optionally supply its own LinkedIn session through the
+        X-LinkedIn-Li-At and X-LinkedIn-JSESSIONID headers, with optional
+        X-LinkedIn-User-Agent; when both cookies are present the request uses only
+        that caller session, never the server session, and is not served from or
+        written to the shared cache. Caller credentials are used for the single
+        request only and are never stored, logged, traced, or cached.
       parameters:
         - name: url
           in: query

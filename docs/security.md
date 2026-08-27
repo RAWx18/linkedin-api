@@ -22,11 +22,23 @@ response cannot exhaust memory.
 
 ## Public API
 
-`GET /v1/*` is protected by API key auth and two layers of rate limiting: per
-client IP and per API key. Keys are checked with a constant-time comparison. The
-per-IP limiter keys on the connection's remote address; behind a proxy that
+`GET /v1/profile` is protected by API-key auth and two layers of rate limiting:
+per client IP and per API key. Keys are checked with a constant-time comparison.
+The per-IP limiter keys on the connection's remote address; behind a proxy that
 terminates client connections, preserve the client address if you need accurate
 per-client limits.
+
+The API key authorizes access to this service and is distinct from the LinkedIn
+session credentials. The server's API key is never shipped to the browser: the
+co-hosted UI is served from the same origin and its requests are admitted via
+`Sec-Fetch-Site: same-origin`, which browsers set from the real origin and page
+scripts cannot forge, so a cross-site page cannot bypass the key. A non-browser
+client can send that header directly, but it stays bound by the per-IP rate limit,
+the aggregate upstream rate and concurrency caps, and the circuit breaker, so it
+gains no secret and no extra upstream capacity; the key remains the access-control
+and per-key attribution mechanism for programmatic callers. The admin endpoint is
+never exempt. `/metrics` is unauthenticated for scraping and holds no secrets;
+restrict it at the network layer if it should not be publicly reachable.
 
 ## Protecting the upstream session
 

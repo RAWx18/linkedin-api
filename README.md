@@ -52,15 +52,27 @@ One main endpoint:
 GET /v1/profile?url=<linkedin profile url>
 ```
 
-It returns `{ "data": <profile>, "meta": <metadata> }`. When `API_KEYS` is set,
-pass a key with the `X-API-Key` header. By default the lookup uses the server's
-LinkedIn session; a caller may optionally supply its own session for a single
-request through the `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID` headers, which
-are request-scoped, isolated per caller, and never stored. Health is at `/healthz`
-and `/readyz`, and metrics at `/metrics`. Every request is recorded to a
-privacy-safe audit store; a protected `GET /admin/usage` exposes usage aggregates
-when `AUDIT_ADMIN_KEYS` is set. Request and response details, the schema, and
-error codes are in [docs/api.md](docs/api.md).
+It returns `{ "data": <profile>, "meta": <metadata> }`.
+
+Two credential types are involved and never mixed:
+
+- `X-API-Key` authorizes the caller to this service. It is required for
+  programmatic access when `API_KEYS` is set. The browser UI is served from the
+  same origin and is exempt, so the key never has to reach the browser.
+- `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID`, with optional
+  `X-LinkedIn-User-Agent`, are an optional LinkedIn session a caller can supply to
+  use their own session for a single request. Without them the server's session is
+  used. They are request-scoped, isolated per caller, and never stored.
+
+```bash
+curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
+  -H "X-API-Key: your-key"
+```
+
+Health is at `/healthz` and `/readyz`, and metrics at `/metrics`. Every request is
+recorded to a privacy-safe audit store; a protected `GET /admin/usage` exposes
+usage aggregates when `AUDIT_ADMIN_KEYS` is set. Request and response details, the
+schema, and error codes are in [docs/api.md](docs/api.md).
 
 ## Build and test
 

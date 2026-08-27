@@ -5,9 +5,19 @@ responses are JSON.
 
 ## Authentication
 
-When `API_KEYS` is set, `GET /v1/*` requires a key. Send it as `X-API-Key: <key>`
-or `Authorization: Bearer <key>`. With no keys configured the API is open, which
-is meant for local development. See [configuration.md](configuration.md).
+Two credential types are involved and never mixed:
+
+- `X-API-Key` authorizes the caller to this service. When `API_KEYS` is set,
+  `GET /v1/profile` requires it, sent as `X-API-Key: <key>` or
+  `Authorization: Bearer <key>`. With no keys configured the API is open, meant
+  for local development. The co-hosted browser UI is served from the same origin
+  and is exempt so the server's key never reaches the browser; programmatic
+  clients still need it, and the admin endpoint is never exempt.
+- `X-LinkedIn-Li-At`, `X-LinkedIn-JSESSIONID`, and optional
+  `X-LinkedIn-User-Agent` are an optional LinkedIn session, described below. They
+  are unrelated to the API key.
+
+See [configuration.md](configuration.md) and [security.md](security.md).
 
 ## GET /v1/profile
 
