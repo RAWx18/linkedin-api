@@ -7,7 +7,7 @@ info:
   description: >
     Retrieves publicly accessible LinkedIn profile information via LinkedIn's
     internal profile API and returns it as a normalized JSON document.
-  version: "2.1"
+  version: "2.2"
 servers:
   - url: https://your-app.azurecontainerapps.io
     description: Production (replace with the deployed URL)
@@ -174,12 +174,16 @@ components:
           format: date-time
         schema_version:
           type: string
-          example: "2.1"
+          example: "2.2"
         source:
           type: string
           example: linkedin
         cached:
           type: boolean
+        sections:
+          type: object
+          additionalProperties: { type: string, enum: [ok, empty, unavailable] }
+          description: Retrieval status of each attempted enrichment section.
       required: [retrieved_at, schema_version, source, cached]
 
     Profile:
@@ -193,6 +197,10 @@ components:
         headline: { type: string }
         summary: { type: string }
         profile_language: { type: string, example: en_US }
+        supported_locales:
+          type: array
+          items: { type: string }
+          example: [en_US]
         location:
           $ref: "#/components/schemas/Location"
         profile_picture:
@@ -214,6 +222,31 @@ components:
         top_voice: { type: boolean }
         student: { type: boolean }
         memorialized: { type: boolean }
+        created_at: { type: string, format: date-time }
+        experience:
+          type: array
+          items: { $ref: "#/components/schemas/Experience" }
+        education:
+          type: array
+          items: { $ref: "#/components/schemas/Education" }
+        skills:
+          type: array
+          items: { type: string }
+        certifications:
+          type: array
+          items: { $ref: "#/components/schemas/Certification" }
+        languages:
+          type: array
+          items: { $ref: "#/components/schemas/Language" }
+        volunteer_experience:
+          type: array
+          items: { $ref: "#/components/schemas/VolunteerExperience" }
+        projects:
+          type: array
+          items: { $ref: "#/components/schemas/Project" }
+        test_scores:
+          type: array
+          items: { $ref: "#/components/schemas/TestScore" }
       required: [public_identifier, profile_url]
 
     Location:
@@ -239,6 +272,84 @@ components:
         height: { type: integer }
         url: { type: string }
       required: [width, url]
+
+    Date:
+      type: object
+      properties:
+        year: { type: integer }
+        month: { type: integer }
+        day: { type: integer }
+      required: [year]
+
+    DateRange:
+      type: object
+      properties:
+        start: { $ref: "#/components/schemas/Date" }
+        end: { $ref: "#/components/schemas/Date" }
+
+    Experience:
+      type: object
+      properties:
+        title: { type: string }
+        company: { type: string }
+        company_url: { type: string }
+        location: { type: string }
+        description: { type: string }
+        date_range: { $ref: "#/components/schemas/DateRange" }
+
+    Education:
+      type: object
+      properties:
+        school: { type: string }
+        school_url: { type: string }
+        degree: { type: string }
+        field_of_study: { type: string }
+        grade: { type: string }
+        activities: { type: string }
+        description: { type: string }
+        date_range: { $ref: "#/components/schemas/DateRange" }
+
+    Certification:
+      type: object
+      properties:
+        name: { type: string }
+        authority: { type: string }
+        authority_url: { type: string }
+        url: { type: string }
+        license_number: { type: string }
+        date_range: { $ref: "#/components/schemas/DateRange" }
+
+    Language:
+      type: object
+      properties:
+        name: { type: string }
+        proficiency: { type: string }
+      required: [name]
+
+    VolunteerExperience:
+      type: object
+      properties:
+        role: { type: string }
+        organization: { type: string }
+        organization_url: { type: string }
+        cause: { type: string }
+        description: { type: string }
+        date_range: { $ref: "#/components/schemas/DateRange" }
+
+    Project:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        date_range: { $ref: "#/components/schemas/DateRange" }
+
+    TestScore:
+      type: object
+      properties:
+        name: { type: string }
+        score: { type: string }
+        description: { type: string }
+        date: { $ref: "#/components/schemas/Date" }
 
     Website:
       type: object
