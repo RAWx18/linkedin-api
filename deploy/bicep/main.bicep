@@ -24,6 +24,9 @@ param linkedInLiAt string
 @secure()
 param linkedInJSessionID string
 
+@description('Browser User-Agent of the session used to obtain the LinkedIn cookies. Required so the session context matches and is not invalidated.')
+param linkedInUserAgent string
+
 @description('Comma-separated public API keys.')
 @secure()
 param apiKeys string
@@ -220,6 +223,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'LINKEDIN_JSESSIONID'
               secretRef: 'linkedin-jsessionid'
+            }
+            {
+              name: 'LINKEDIN_USER_AGENT'
+              value: linkedInUserAgent
             }
             {
               name: 'API_KEYS'

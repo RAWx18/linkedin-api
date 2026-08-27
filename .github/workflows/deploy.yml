@@ -44,6 +44,7 @@ jobs:
           parameters: >-
             linkedInLiAt=${{ secrets.LINKEDIN_LI_AT }}
             linkedInJSessionID=${{ secrets.LINKEDIN_JSESSIONID }}
+            linkedInUserAgent=${{ secrets.LINKEDIN_USER_AGENT }}
             apiKeys=${{ secrets.API_KEYS }}
 
       - name: Build and push image
