@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -26,6 +27,12 @@ type mockClient struct {
 	calls    int
 	lastCred linkedin.Credential
 	profile  func() (json.RawMessage, error)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }
 
 func (m *mockClient) FetchProfile(_ context.Context, _ string, cred linkedin.Credential) (json.RawMessage, error) {
@@ -154,6 +161,45 @@ func TestReadyzNotReady(t *testing.T) {
 	defer srv.Close()
 	if resp, _ := get(t, srv, "/readyz", nil); resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("not-ready status = %d", resp.StatusCode)
+	}
+}
+
+func TestImageProxy(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	metrics := observability.NewMetrics()
+	svc := service.NewProfileService(service.Deps{Client: &mockClient{}, Cache: noopCache{}, Metrics: metrics, Logger: logger})
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "media.licdn.com" {
+			t.Fatalf("upstream host = %q", r.URL.Host)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body:       io.NopCloser(strings.NewReader("jpeg-data")),
+		}, nil
+	})}
+	handler := api.NewRouter(api.Deps{
+		Config: baseConfig(), Service: svc, ImageClient: client, Metrics: metrics, Logger: logger,
+		Ready: func() bool { return true },
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	resp, body := get(t, srv, "/v1/image?url=https%3A%2F%2Fmedia.licdn.com%2Fdms%2Fimage.jpg", nil)
+	if resp.StatusCode != http.StatusOK || string(body) != "jpeg-data" {
+		t.Fatalf("status = %d body = %q", resp.StatusCode, body)
+	}
+	if resp.Header.Get("Content-Type") != "image/jpeg" {
+		t.Errorf("content type = %q", resp.Header.Get("Content-Type"))
+	}
+}
+
+func TestImageProxyRejectsOtherHosts(t *testing.T) {
+	srv := newServer(baseConfig(), &mockClient{})
+	defer srv.Close()
+	resp, _ := get(t, srv, "/v1/image?url=https%3A%2F%2Fexample.com%2Fimage.jpg", nil)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d", resp.StatusCode)
 	}
 }
 

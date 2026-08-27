@@ -16,14 +16,15 @@ import (
 
 // Deps holds everything the router needs to serve requests.
 type Deps struct {
-	Config   *config.Config
-	Service  *service.ProfileService
-	Metrics  *observability.Metrics
-	Logger   *slog.Logger
-	Ready    func() bool
-	UI       fs.FS
-	Recorder audit.Recorder
-	Usage    UsageQuerier
+	Config      *config.Config
+	Service     *service.ProfileService
+	ImageClient *http.Client
+	Metrics     *observability.Metrics
+	Logger      *slog.Logger
+	Ready       func() bool
+	UI          fs.FS
+	Recorder    audit.Recorder
+	Usage       UsageQuerier
 }
 
 // NewRouter builds the fully wired HTTP handler. The API surface (/v1/*) is
@@ -36,6 +37,11 @@ func NewRouter(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	ph := &profileHandler{svc: d.Service, allowCaller: d.Config.LinkedIn.AllowCallerSession}
+	imageClient := d.ImageClient
+	if imageClient == nil {
+		imageClient = defaultImageClient()
+	}
+	ih := &imageHandler{client: imageClient}
 	hh := &healthHandler{ready: d.Ready}
 
 	publicAuth := newAPIKeyAuth(d.Config.APIKeys)
@@ -58,6 +64,7 @@ func NewRouter(d Deps) http.Handler {
 	}
 
 	mux.Handle("GET /v1/profile", chain(http.HandlerFunc(ph.handle), apiMW...))
+	mux.Handle("GET /v1/image", chain(http.HandlerFunc(ih.handle), apiMW...))
 
 	mux.HandleFunc("GET /healthz", hh.live)
 	mux.HandleFunc("GET /readyz", hh.readyz)
