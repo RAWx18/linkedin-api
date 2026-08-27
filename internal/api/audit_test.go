@@ -114,7 +114,7 @@ func TestAuditRecordsCacheHit(t *testing.T) {
 
 func TestAuditRecordsRateLimitDecision(t *testing.T) {
 	cfg := baseConfig()
-	cfg.RateLimit = config.RateLimitConfig{Enabled: true, RPS: 1, Burst: 1, KeyRPS: 1000, KeyBurst: 1000}
+	cfg.RateLimit = config.RateLimitConfig{Enabled: true, RPS: 1, Burst: 1}
 	srv, rec := newAuditServer(t, cfg, &mockClient{}, nil, nil)
 
 	for i := 0; i < 3; i++ {
@@ -136,27 +136,6 @@ func TestAuditRecordsRateLimitDecision(t *testing.T) {
 	}
 	if !limited {
 		t.Error("no request was recorded as ip_limited")
-	}
-}
-
-func TestAuditRecordsAuthFailure(t *testing.T) {
-	cfg := baseConfig()
-	cfg.APIKeys = []string{"secret"}
-	srv, rec := newAuditServer(t, cfg, &mockClient{}, nil, nil)
-
-	resp, _ := get(t, srv, profileURL, nil)
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", resp.StatusCode)
-	}
-	r := waitForRecords(t, rec, 1)[0]
-	if r.ErrorClass != "unauthorized" || r.Status != http.StatusUnauthorized {
-		t.Errorf("auth failure not recorded: %+v", r)
-	}
-	if r.KeyID != audit.AnonymousKey {
-		t.Errorf("key_id = %q, want %q", r.KeyID, audit.AnonymousKey)
-	}
-	if r.UpstreamCalled {
-		t.Error("unauthorized request should not reach upstream")
 	}
 }
 

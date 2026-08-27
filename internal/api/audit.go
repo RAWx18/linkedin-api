@@ -13,7 +13,7 @@ import (
 
 // auditMiddleware records one privacy-safe entry per API request. It is the
 // outermost API-route layer so it also captures requests rejected by rate
-// limiting or authentication. Every request is emitted as a structured "audit"
+// limiting. Every request is emitted as a structured "audit"
 // log event, which the platform log pipeline (Azure Log Analytics) keeps as a
 // complete, queryable history regardless of storage. When a durable store is
 // present the record is additionally enqueued for it; that enqueue is
@@ -32,7 +32,7 @@ func auditMiddleware(logger *slog.Logger, rec audit.Recorder, proxyDepth int) mi
 				Time:      start.UTC(),
 				RequestID: RequestIDFromContext(r.Context()),
 				ClientIP:  clientIP(r, proxyDepth),
-				KeyID:     audit.KeyID(extractAPIKey(r)),
+				KeyID:     audit.AnonymousKey,
 				Status:    sr.Status(),
 				Latency:   time.Since(start),
 			})

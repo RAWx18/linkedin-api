@@ -10,7 +10,7 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	for _, k := range []string{"ENV", "LINKEDIN_LI_AT", "LINKEDIN_JSESSIONID", "API_KEYS", "SERVER_PORT", "LOG_FORMAT", "CACHE_ENABLED"} {
+	for _, k := range []string{"ENV", "LINKEDIN_LI_AT", "LINKEDIN_JSESSIONID", "SERVER_PORT", "LOG_FORMAT", "CACHE_ENABLED"} {
 		t.Setenv(k, "")
 	}
 	cfg, err := Load()
@@ -32,7 +32,6 @@ func TestLoadEnvOverride(t *testing.T) {
 	t.Setenv("SERVER_PORT", "9090")
 	t.Setenv("LOG_FORMAT", "text")
 	t.Setenv("CACHE_ENABLED", "false")
-	t.Setenv("API_KEYS", "a, b ,c")
 	t.Setenv("RATE_LIMIT_RPS", "7.5")
 	t.Setenv("HTTP_REQUEST_TIMEOUT", "5s")
 	cfg, err := Load()
@@ -48,9 +47,6 @@ func TestLoadEnvOverride(t *testing.T) {
 	if cfg.Cache.Enabled {
 		t.Error("cache should be disabled")
 	}
-	if len(cfg.APIKeys) != 3 {
-		t.Errorf("api keys = %v", cfg.APIKeys)
-	}
 	if cfg.RateLimit.RPS != 7.5 {
 		t.Errorf("rps = %v", cfg.RateLimit.RPS)
 	}
@@ -65,7 +61,7 @@ func validProdConfig() *Config {
 		Server:    ServerConfig{Port: 8080},
 		LinkedIn:  LinkedInConfig{BaseURL: "https://www.linkedin.com", UserAgent: "Mozilla/5.0 (test) Browser/1.0", Timeout: time.Second, ProfileTimeout: time.Second, EnrichmentConcurrency: 1},
 		Cache:     CacheConfig{Enabled: true, MaxEntries: 10},
-		RateLimit: RateLimitConfig{Enabled: true, RPS: 1, Burst: 1, KeyRPS: 1, KeyBurst: 1},
+		RateLimit: RateLimitConfig{Enabled: true, RPS: 1, Burst: 1},
 		Upstream: UpstreamConfig{
 			MaxConcurrency:   1,
 			RateRPS:          1,
@@ -85,7 +81,7 @@ func TestValidateProductionRequiresSecrets(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a validation error in production without secrets")
 	}
-	for _, want := range []string{"LINKEDIN_LI_AT", "LINKEDIN_JSESSIONID", "API_KEYS"} {
+	for _, want := range []string{"LINKEDIN_LI_AT", "LINKEDIN_JSESSIONID"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should mention %s: %s", want, err.Error())
 		}
@@ -96,7 +92,6 @@ func TestValidateProductionComplete(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.LinkedIn.LiAt = "cookie"
 	cfg.LinkedIn.JSessionID = "ajax:1"
-	cfg.APIKeys = []string{"key"}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -106,7 +101,6 @@ func TestValidateRequiresUserAgentWithSession(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.LinkedIn.LiAt = "cookie"
 	cfg.LinkedIn.JSessionID = "ajax:1"
-	cfg.APIKeys = []string{"key"}
 	cfg.LinkedIn.UserAgent = ""
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "LINKEDIN_USER_AGENT") {
@@ -126,7 +120,6 @@ func TestValidateRetryBackoff(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.LinkedIn.LiAt = "cookie"
 	cfg.LinkedIn.JSessionID = "ajax:1"
-	cfg.APIKeys = []string{"key"}
 	cfg.LinkedIn.MaxRetries = 2
 	cfg.LinkedIn.RetryBackoff = 0
 	if err := cfg.Validate(); err == nil {
@@ -142,7 +135,6 @@ func TestValidateAuditSettings(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.LinkedIn.LiAt = "cookie"
 	cfg.LinkedIn.JSessionID = "ajax:1"
-	cfg.APIKeys = []string{"key"}
 
 	cfg.Audit = AuditConfig{Enabled: true}
 	err := cfg.Validate()
@@ -164,7 +156,6 @@ func TestValidateAuditSettings(t *testing.T) {
 func TestLogValueRedactsSecrets(t *testing.T) {
 	cfg := &Config{
 		LinkedIn: LinkedInConfig{LiAt: "supersecretcookie", JSessionID: "ajax:secretsession"},
-		APIKeys:  []string{"secretkey"},
 	}
 	if s := cfg.LogValue().String(); strings.Contains(s, "secret") {
 		t.Errorf("log value leaked a secret: %s", s)

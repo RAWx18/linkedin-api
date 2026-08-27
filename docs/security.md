@@ -22,25 +22,17 @@ response cannot exhaust memory.
 
 ## Public API
 
-`GET /v1/profile` is protected by API-key auth and two layers of rate limiting:
-per client IP and per API key. Keys are checked with a constant-time comparison.
-The per-IP limiter keys on the connection's remote address by default. Behind a
+`GET /v1/profile` is public and protected by per-client-IP rate limiting. The
+limiter keys on the connection's remote address by default. Behind a
 known number of trusted reverse proxies, set `TRUSTED_PROXY_DEPTH` so the client
 IP is read from `X-Forwarded-For`, counting entries from the right; a client
 cannot spoof its address that way because the trusted proxy always appends the
 real peer after anything the client sent.
 
-The API key authorizes access to this service and is distinct from the LinkedIn
-session credentials. The server's API key is never shipped to the browser: the
-co-hosted UI is served from the same origin and its requests are admitted via
-`Sec-Fetch-Site: same-origin`, which browsers set from the real origin and page
-scripts cannot forge, so a cross-site page cannot bypass the key. A non-browser
-client can send that header directly, but it stays bound by the per-IP rate limit,
-the aggregate upstream rate and concurrency caps, and the circuit breaker, so it
-gains no secret and no extra upstream capacity; the key remains the access-control
-and per-key attribution mechanism for programmatic callers. The admin endpoint is
-never exempt. `/metrics` is unauthenticated for scraping and holds no secrets;
-restrict it at the network layer if it should not be publicly reachable.
+The aggregate upstream rate and concurrency caps, request coalescing, negative
+cache, and circuit breaker limit pressure on the shared LinkedIn session. The
+admin endpoint remains separately authenticated. `/metrics` is unauthenticated
+for scraping and holds no secrets; restrict it at the network layer if needed.
 
 ## Protecting the upstream session
 
@@ -103,7 +95,7 @@ The credentials are treated as request-scoped secrets and are strictly isolated:
   limit or broad restriction still engages the global upstream protection for all
   traffic.
 
-All existing protections (API-key auth, per-IP and per-key limits, the aggregate
+All existing protections (per-IP limits, the aggregate
 upstream rate and concurrency caps, URL validation, timeouts, and response-size
 limits) apply identically regardless of which session a request uses, so caller
 credentials cannot be used to bypass any limit.
@@ -111,12 +103,11 @@ credentials cannot be used to bypass any limit.
 ## Request auditing
 
 Every API request is recorded to a durable store for abuse investigation and
-usage analysis. The store holds no secrets: API keys are reduced to a one-way
-fingerprint, the full URL is never kept (only the normalized public identifier),
+usage analysis. The store holds no secrets: the full URL is never kept (only the normalized public identifier),
 and no cookies or authorization headers are stored. Client IPs are retained for
 investigation and bounded by a retention window. The `/admin/usage` query
 endpoint is disabled unless `AUDIT_ADMIN_KEYS` is set and is protected by those
-admin keys, which are separate from the public `API_KEYS`. Auditing is best
+admin keys. Auditing is best
 effort and isolated from the request path: a full buffer drops records and a
 failing store is counted, never surfaced to a caller. Details are in
 [auditing.md](auditing.md).

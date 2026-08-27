@@ -1,7 +1,7 @@
 # Request auditing and usage tracking
 
 The service records privacy-safe metadata about every public API request in a
-durable store. This is separate from application logs and from Prometheus
+durable store. This is separate from application logs and Prometheus
 metrics: logs are ephemeral and unstructured for querying, metrics answer "how is
 the system behaving now", and the audit store answers "what exactly happened" so
 operators can investigate abuse, measure LinkedIn upstream load, and study usage.
@@ -9,19 +9,19 @@ operators can investigate abuse, measure LinkedIn upstream load, and study usage
 ## What is recorded
 
 One row is written per request to `/v1/profile`, including requests rejected by
-rate limiting or authentication. Each row holds:
+rate limiting. Each row holds:
 
 | Column | Meaning |
 | --- | --- |
 | `ts` | Request time, Unix milliseconds UTC |
 | `request_id` | Correlates the row with logs and the client's `X-Request-ID` |
 | `client_ip` | Remote address, from the connection not a spoofable header |
-| `key_id` | Non-reversible fingerprint of the API key, or `anonymous` |
+| `key_id` | `anonymous` for public API requests |
 | `profile_id` | Normalized LinkedIn public identifier, empty if never parsed |
 | `credential_mode` | `server_session` or `caller_session`, empty if not evaluated |
 | `cred_fp` | Non-reversible fingerprint of a caller session (`cs_...`), empty for the server session |
 | `status` | Final HTTP status |
-| `rate_decision` | `allowed`, `ip_limited`, or `key_limited` |
+| `rate_decision` | `allowed` or `ip_limited` |
 | `cached` | Whether the response was served from cache |
 | `upstream_called` | Whether a LinkedIn request was actually made |
 | `upstream_outcome` | `ok`, `profile_not_found`, or an `upstream_*` failure code |
@@ -34,9 +34,7 @@ rate limiting or authentication. Each row holds:
 The store is designed to hold no secrets and the minimum identifying data needed
 to investigate abuse:
 
-- No API keys, `li_at`, `JSESSIONID`, authorization headers, or cookies are ever
-  written. The API key is reduced to a one-way SHA-256 fingerprint (`key_id`) so
-  traffic can be grouped by caller without the key being recoverable.
+- No `li_at`, `JSESSIONID`, authorization headers, or cookies are ever written.
 - Caller-supplied `li_at` and `JSESSIONID` are never written either. When a caller
   uses its own session, only the `credential_mode` and a non-reversible keyed
   fingerprint (`cred_fp`, `cs_...`) are stored, so caller activity can be grouped
@@ -102,8 +100,7 @@ the requested time window:
 ## Usage endpoint
 
 `GET /admin/usage` returns aggregated usage for a time window. It is exposed only
-when `AUDIT_ADMIN_KEYS` is set and is protected by those keys, separate from the
-public `API_KEYS`. The window and result limit are clamped (30 days and 100 rows)
+when `AUDIT_ADMIN_KEYS` is set and is protected by those keys. The window and result limit are clamped (30 days and 100 rows)
 so the endpoint stays cheap and cannot be turned into an expensive scan.
 
 Query parameters: `window` (a duration such as `24h`, default `24h`) and `limit`

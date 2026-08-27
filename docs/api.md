@@ -6,17 +6,9 @@ The production base URL is
 
 ## Authentication
 
-Two credential types are involved and never mixed:
-
-- `X-API-Key` authorizes the caller to this service. When `API_KEYS` is set,
-  `GET /v1/profile` requires it, sent as `X-API-Key: <key>` or
-  `Authorization: Bearer <key>`. With no keys configured the API is open, meant
-  for local development. The co-hosted browser UI is served from the same origin
-  and is exempt so the server's key never reaches the browser; programmatic
-  clients still need it, and the admin endpoint is never exempt.
-- `X-LinkedIn-Li-At`, `X-LinkedIn-JSESSIONID`, and optional
-  `X-LinkedIn-User-Agent` are an optional LinkedIn session, described below. They
-  are unrelated to the API key.
+The profile API is public and requires no API key. `X-LinkedIn-Li-At`,
+`X-LinkedIn-JSESSIONID`, and optional `X-LinkedIn-User-Agent` may provide a
+request-scoped LinkedIn session as described below.
 
 See [configuration.md](configuration.md) and [security.md](security.md).
 
@@ -34,8 +26,7 @@ Query parameters:
 Example:
 
 ```bash
-curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
-  -H "X-API-Key: your-key"
+curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates"
 ```
 
 ### Optional caller-supplied session
@@ -60,7 +51,6 @@ history:
 export LI_AT="your_li_at_cookie"
 export JSESSIONID="ajax:your_jsessionid"
 curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
-  -H "X-API-Key: your-key" \
   -H "X-LinkedIn-Li-At: $LI_AT" \
   -H "X-LinkedIn-JSESSIONID: $JSESSIONID" \
   -H "X-LinkedIn-User-Agent: $LINKEDIN_UA"

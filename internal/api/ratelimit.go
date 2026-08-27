@@ -24,7 +24,7 @@ type bucket struct {
 	lastSeen time.Time
 }
 
-// rateLimiter keeps a token bucket per key (client IP or API key). The map is
+// rateLimiter keeps a token bucket per client identifier. The map is
 // bounded and idle entries are evicted lazily so memory cannot grow without limit.
 type rateLimiter struct {
 	mu       sync.Mutex

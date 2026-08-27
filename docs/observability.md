@@ -6,7 +6,7 @@ Logs are structured JSON written to stdout through `log/slog`. Each request logs
 `request_id`, method, route, status, duration, and client IP. Credentials,
 cookies, tokens, and profile data are never logged, and the configuration is
 logged through a `LogValue` that reports only non-sensitive fields such as whether
-a session is present and how many API keys are set. Use `LOG_FORMAT=text` for
+a session is present. Use `LOG_FORMAT=text` for
 readable local output and `LOG_LEVEL=debug` for per-request upstream detail.
 
 ## Metrics

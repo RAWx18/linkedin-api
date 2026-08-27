@@ -30,7 +30,6 @@ type Config struct {
 	RateLimit RateLimitConfig
 	Upstream  UpstreamConfig
 	Audit     AuditConfig
-	APIKeys   []string
 	Log       LogConfig
 	Metrics   MetricsConfig
 }
@@ -68,11 +67,9 @@ type CacheConfig struct {
 }
 
 type RateLimitConfig struct {
-	Enabled  bool
-	RPS      float64
-	Burst    int
-	KeyRPS   float64
-	KeyBurst int
+	Enabled bool
+	RPS     float64
+	Burst   int
 }
 
 // UpstreamConfig bounds and protects traffic to LinkedIn: an aggregate rate and
@@ -145,11 +142,9 @@ func Load() (*Config, error) {
 			MaxEntries: getEnvInt("CACHE_MAX_ENTRIES", 1000),
 		},
 		RateLimit: RateLimitConfig{
-			Enabled:  getEnvBool("RATE_LIMIT_ENABLED", true),
-			RPS:      getEnvFloat("RATE_LIMIT_RPS", 5),
-			Burst:    getEnvInt("RATE_LIMIT_BURST", 10),
-			KeyRPS:   getEnvFloat("RATE_LIMIT_KEY_RPS", 10),
-			KeyBurst: getEnvInt("RATE_LIMIT_KEY_BURST", 20),
+			Enabled: getEnvBool("RATE_LIMIT_ENABLED", true),
+			RPS:     getEnvFloat("RATE_LIMIT_RPS", 5),
+			Burst:   getEnvInt("RATE_LIMIT_BURST", 10),
 		},
 		Upstream: UpstreamConfig{
 			MaxConcurrency:   getEnvInt("UPSTREAM_MAX_CONCURRENCY", 4),
@@ -171,7 +166,6 @@ func Load() (*Config, error) {
 			FlushInterval: getEnvDuration("AUDIT_FLUSH_INTERVAL", time.Second),
 			AdminKeys:     getEnvCSV("AUDIT_ADMIN_KEYS"),
 		},
-		APIKeys: getEnvCSV("API_KEYS"),
 		Log: LogConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "json"),
@@ -229,9 +223,6 @@ func (c *Config) Validate() error {
 	if c.RateLimit.Enabled && (c.RateLimit.RPS <= 0 || c.RateLimit.Burst < 1) {
 		problems = append(problems, "RATE_LIMIT_RPS must be > 0 and RATE_LIMIT_BURST >= 1 when rate limiting is enabled")
 	}
-	if c.RateLimit.Enabled && (c.RateLimit.KeyRPS <= 0 || c.RateLimit.KeyBurst < 1) {
-		problems = append(problems, "RATE_LIMIT_KEY_RPS must be > 0 and RATE_LIMIT_KEY_BURST >= 1 when rate limiting is enabled")
-	}
 	if c.Upstream.MaxConcurrency < 1 {
 		problems = append(problems, "UPSTREAM_MAX_CONCURRENCY must be >= 1")
 	}
@@ -281,9 +272,6 @@ func (c *Config) Validate() error {
 		if c.LinkedIn.JSessionID == "" {
 			problems = append(problems, "LINKEDIN_JSESSIONID is required in production")
 		}
-		if len(c.APIKeys) == 0 {
-			problems = append(problems, "API_KEYS is required in production")
-		}
 	}
 
 	if len(problems) > 0 {
@@ -308,7 +296,6 @@ func (c *Config) LogValue() slog.Value {
 		slog.Bool("metrics_enabled", c.Metrics.Enabled),
 		slog.Bool("audit_enabled", c.Audit.Enabled),
 		slog.Bool("linkedin_session_present", c.HasLinkedInSession()),
-		slog.Int("api_keys_count", len(c.APIKeys)),
 		slog.String("log_level", c.Log.Level),
 	)
 }

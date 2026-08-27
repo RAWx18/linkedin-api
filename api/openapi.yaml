@@ -20,10 +20,8 @@ paths:
       summary: Fetch a normalized LinkedIn profile
       operationId: getProfile
       description: >
-        Returns a normalized profile. Access is authorized by the X-API-Key header
-        when API_KEYS is configured; the co-hosted same-origin browser UI is exempt
-        so the server key never reaches the browser, while programmatic clients must
-        send it. By default the request uses the server-configured LinkedIn session.
+        Returns a normalized profile without requiring an API key. By default the
+        request uses the server-configured LinkedIn session.
         A caller may optionally supply its own LinkedIn session through the
         X-LinkedIn-Li-At and X-LinkedIn-JSESSIONID headers, with optional
         X-LinkedIn-User-Agent; when both cookies are present the request uses only
@@ -63,8 +61,6 @@ paths:
             matches the browser that created the cookies. Ignored without caller cookies.
           schema:
             type: string
-      security:
-        - apiKey: []
       responses:
         "200":
           description: The normalized profile.
@@ -131,7 +127,7 @@ paths:
         Proxies an image from media.licdn.com so the browser UI can render
         profile and background pictures. Only https URLs on that host are
         accepted, the response body is capped at 8 MiB, and the endpoint sits
-        behind the same authentication and rate limiting as /v1/profile.
+        behind the same per-IP rate limiting as /v1/profile.
       parameters:
         - name: url
           in: query
@@ -139,8 +135,6 @@ paths:
           description: An https://media.licdn.com/... image URL from a profile response.
           schema:
             type: string
-      security:
-        - apiKey: []
       responses:
         "200":
           description: The image bytes with the upstream content type.
@@ -201,12 +195,6 @@ paths:
           description: The service is not ready.
 
 components:
-  securitySchemes:
-    apiKey:
-      type: apiKey
-      in: header
-      name: X-API-Key
-
   schemas:
     ProfileResult:
       type: object

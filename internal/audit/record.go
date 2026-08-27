@@ -19,9 +19,8 @@ import (
 
 // Rate-limit decisions recorded for each request.
 const (
-	DecisionAllowed    = "allowed"
-	DecisionIPLimited  = "ip_limited"
-	DecisionKeyLimited = "key_limited"
+	DecisionAllowed   = "allowed"
+	DecisionIPLimited = "ip_limited"
 )
 
 // AnonymousKey is the key identifier stored when a request carries no API key.

@@ -20,7 +20,7 @@ import (
 	"github.com/garudexlabs/linkedin-api/internal/service"
 )
 
-// uiFS is a minimal embedded UI so the router enables first-party access.
+// uiFS is a minimal embedded UI for router tests.
 var uiFS = fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}}
 
 type stubUsage struct{}
@@ -48,41 +48,8 @@ func newUIServer(t *testing.T, cfg *config.Config, m *mockClient, usage api.Usag
 	return srv
 }
 
-func TestFirstPartyUIExemptFromAPIKey(t *testing.T) {
+func TestAdminRequiresKey(t *testing.T) {
 	cfg := baseConfig()
-	cfg.APIKeys = []string{"secret-key"}
-	srv := newUIServer(t, cfg, &mockClient{}, nil)
-	path := "/v1/profile?url=https://www.linkedin.com/in/ada"
-
-	if resp, _ := get(t, srv, path, nil); resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("programmatic request without a key: status = %d, want 401", resp.StatusCode)
-	}
-	if resp, _ := get(t, srv, path, map[string]string{"Sec-Fetch-Site": "cross-site"}); resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("cross-site request without a key: status = %d, want 401", resp.StatusCode)
-	}
-	if resp, _ := get(t, srv, path, map[string]string{"Sec-Fetch-Site": "same-origin"}); resp.StatusCode != http.StatusOK {
-		t.Errorf("first-party UI request without a key: status = %d, want 200", resp.StatusCode)
-	}
-	if resp, _ := get(t, srv, path, map[string]string{"X-API-Key": "secret-key"}); resp.StatusCode != http.StatusOK {
-		t.Errorf("request with a valid key: status = %d, want 200", resp.StatusCode)
-	}
-}
-
-func TestAPIOnlyDeploymentNotFirstPartyExempt(t *testing.T) {
-	cfg := baseConfig()
-	cfg.APIKeys = []string{"secret-key"}
-	srv := newServer(cfg, &mockClient{}) // no UI served
-	defer srv.Close()
-
-	resp, _ := get(t, srv, "/v1/profile?url=https://www.linkedin.com/in/ada", map[string]string{"Sec-Fetch-Site": "same-origin"})
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("same-origin without a UI must still require a key: status = %d, want 401", resp.StatusCode)
-	}
-}
-
-func TestAdminNeverFirstPartyExempt(t *testing.T) {
-	cfg := baseConfig()
-	cfg.APIKeys = []string{"secret-key"}
 	cfg.Audit.AdminKeys = []string{"admin-key"}
 	srv := newUIServer(t, cfg, &mockClient{}, stubUsage{})
 
@@ -94,9 +61,8 @@ func TestAdminNeverFirstPartyExempt(t *testing.T) {
 	}
 }
 
-func TestHealthAndMetricsPublicWithKeysSet(t *testing.T) {
+func TestHealthAndMetricsPublic(t *testing.T) {
 	cfg := baseConfig()
-	cfg.APIKeys = []string{"secret-key"}
 	srv := newUIServer(t, cfg, &mockClient{}, nil)
 	for _, p := range []string{"/healthz", "/readyz", "/metrics"} {
 		if resp, _ := get(t, srv, p, nil); resp.StatusCode != http.StatusOK {

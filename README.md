@@ -24,12 +24,10 @@ curl https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io/hea
 # {"status":"ok"}
 ```
 
-The profile endpoint requires an API key (`API_KEYS` is mandatory in production);
-the key is shared with the submission rather than committed here:
+The profile endpoint is public and requires no API key:
 
 ```bash
-curl "https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
-  -H "X-API-Key: <key provided with the submission>"
+curl "https://linkedinapi-app.nicegrass-014c577e.eastus.azurecontainerapps.io/v1/profile?url=https://www.linkedin.com/in/williamhgates"
 ```
 
 A full example response is in [docs/api.md](docs/api.md).
@@ -74,19 +72,13 @@ GET /v1/profile?url=<linkedin profile url>
 
 It returns `{ "data": <profile>, "meta": <metadata> }`.
 
-Two credential types are involved and never mixed:
-
-- `X-API-Key` authorizes the caller to this service. It is required for
-  programmatic access when `API_KEYS` is set. The browser UI is same-origin and
-  exempt, so the key never reaches the browser.
-- `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID`, with optional
+Optional `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID` headers, with optional
   `X-LinkedIn-User-Agent`, let a caller supply its own LinkedIn session for a
   single request. Without them the server session is used. They are
   request-scoped, isolated per caller, and never stored.
 
 ```bash
-curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
-  -H "X-API-Key: your-key"
+curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates"
 ```
 
 Liveness and readiness are at `/healthz` and `/readyz`, and Prometheus metrics at

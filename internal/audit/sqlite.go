@@ -14,7 +14,7 @@ import (
 
 // schema defines the audit table and the indexes that keep the usage queries
 // bounded: a time index for windowed scans and retention, plus composite indexes
-// for the per-profile, per-client, and per-key lookups the queries perform.
+// for the per-profile and per-client lookups the queries perform.
 const schema = `
 CREATE TABLE IF NOT EXISTS audit_events (
 	id               INTEGER PRIMARY KEY AUTOINCREMENT,

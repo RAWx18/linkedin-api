@@ -34,8 +34,6 @@ template is in [.env.example](../.env.example).
 | `RATE_LIMIT_ENABLED` | `true` | no | Enable per-IP rate limiting |
 | `RATE_LIMIT_RPS` | `5` | no | Sustained requests per second per IP |
 | `RATE_LIMIT_BURST` | `10` | no | Burst allowance per IP |
-| `RATE_LIMIT_KEY_RPS` | `10` | no | Sustained requests per second per API key |
-| `RATE_LIMIT_KEY_BURST` | `20` | no | Burst allowance per API key |
 | `UPSTREAM_MAX_CONCURRENCY` | `4` | no | Max concurrent retrievals sent to LinkedIn |
 | `UPSTREAM_RATE_RPS` | `5` | no | Aggregate retrievals per second to LinkedIn |
 | `UPSTREAM_RATE_BURST` | `10` | no | Aggregate burst to LinkedIn |
@@ -45,7 +43,6 @@ template is in [.env.example](../.env.example).
 | `UPSTREAM_SESSION_COOLDOWN` | `5m` | no | Base cooldown for an unhealthy session, doubling on repeated failed probes |
 | `CALLER_SESSION_UNHEALTHY_TTL` | `5m` | no | How long a rejected caller session is fast-failed before it may be tried again |
 | `UPSTREAM_NEG_CACHE_TTL` | `1m` | no | How long a confirmed-missing profile is remembered |
-| `API_KEYS` | | production | Comma-separated keys; empty disables auth in dev |
 | `LOG_LEVEL` | `info` | no | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `json` | no | `json` or `text` |
 | `METRICS_ENABLED` | `true` | no | Expose `/metrics` |
@@ -57,7 +54,7 @@ template is in [.env.example](../.env.example).
 | `AUDIT_FLUSH_INTERVAL` | `1s` | no | Maximum time a record waits before it is written |
 | `AUDIT_ADMIN_KEYS` | | no | Comma-separated keys for `/admin/usage`; empty disables the endpoint |
 
-Production requires `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`, and `API_KEYS`.
+Production requires `LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID`.
 
 ## Session cookies
 

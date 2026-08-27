@@ -27,10 +27,6 @@ param linkedInJSessionID string
 @description('Browser User-Agent of the session used to obtain the LinkedIn cookies. Required so the session context matches and is not invalidated.')
 param linkedInUserAgent string
 
-@description('Comma-separated public API keys.')
-@secure()
-param apiKeys string
-
 @description('Comma-separated admin keys for the /admin/usage endpoint. Leave empty to keep the endpoint disabled.')
 @secure()
 param auditAdminKeys string = ''
@@ -87,10 +83,6 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'linkedin-jsessionid'
           value: linkedInJSessionID
         }
-        {
-          name: 'api-keys'
-          value: apiKeys
-        }
       ], empty(auditAdminKeys) ? [] : [
         {
           name: 'audit-admin-keys'
@@ -139,10 +131,6 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'LINKEDIN_USER_AGENT'
               value: linkedInUserAgent
-            }
-            {
-              name: 'API_KEYS'
-              secretRef: 'api-keys'
             }
             {
               name: 'AUDIT_ENABLED'

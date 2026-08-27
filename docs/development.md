@@ -22,8 +22,8 @@ looks like:
 curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates"
 ```
 
-With no `API_KEYS` set, the API is open, which is fine for local work. Getting the
-session cookies is covered in [session-cookies.md](session-cookies.md).
+The API is public. Getting the session cookies is covered in
+[session-cookies.md](session-cookies.md).
 
 ## Make targets
 
@@ -51,7 +51,7 @@ found, rate limit, retried 5xx, timeout, an oversized-body cap, and deterministi
 request headers), the service with a mock client including cache, negative cache,
 coalescing, gate rejection, and caller-session isolation, the upstream guard
 including circuit breaking and server and caller session health, the API layer
-for routing, validation, auth, rate limiting, caller credential headers, and
+for routing, validation, rate limiting, caller credential headers, and
 error mapping, and the audit, cache, and config packages. The parser also has a
 benchmark.
 

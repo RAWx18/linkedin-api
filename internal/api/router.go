@@ -27,12 +27,9 @@ type Deps struct {
 	Usage       UsageQuerier
 }
 
-// NewRouter builds the fully wired HTTP handler. The API surface (/v1/*) is
-// wrapped with rate limiting and API-key auth; health, metrics and the UI are
-// intentionally exempt so probes and dashboards work without credentials. When
-// the UI is served, same-origin requests from it are admitted without an API key
-// so the server's key never reaches the browser; programmatic clients still need
-// the key, and the admin endpoint is never exempt.
+// NewRouter builds the fully wired HTTP handler. Public API routes are protected
+// by per-IP and upstream rate limits; administrative usage data requires a
+// separate admin key. Health, metrics, and the UI are intentionally public.
 func NewRouter(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
@@ -44,11 +41,6 @@ func NewRouter(d Deps) http.Handler {
 	ih := &imageHandler{client: imageClient}
 	hh := &healthHandler{ready: d.Ready}
 
-	publicAuth := newAPIKeyAuth(d.Config.APIKeys)
-	if d.UI != nil {
-		publicAuth.allowFirstParty()
-	}
-
 	depth := d.Config.Server.TrustedProxyDepth
 
 	var apiMW []middleware
@@ -58,11 +50,6 @@ func NewRouter(d Deps) http.Handler {
 	if d.Config.RateLimit.Enabled {
 		apiMW = append(apiMW, newRateLimiter(d.Config.RateLimit.RPS, d.Config.RateLimit.Burst, func(r *http.Request) string { return clientIP(r, depth) }, audit.DecisionIPLimited).middleware)
 	}
-	apiMW = append(apiMW, publicAuth.middleware)
-	if d.Config.RateLimit.Enabled {
-		apiMW = append(apiMW, newRateLimiter(d.Config.RateLimit.KeyRPS, d.Config.RateLimit.KeyBurst, extractAPIKey, audit.DecisionKeyLimited).middleware)
-	}
-
 	mux.Handle("GET /v1/profile", chain(http.HandlerFunc(ph.handle), apiMW...))
 	mux.Handle("GET /v1/image", chain(http.HandlerFunc(ih.handle), apiMW...))
 

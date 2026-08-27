@@ -297,23 +297,14 @@ func TestProfileUpstreamUnavailableMapsTo503(t *testing.T) {
 	}
 }
 
-func TestAPIKeyEnforced(t *testing.T) {
+func TestProfileIsPublic(t *testing.T) {
 	cfg := baseConfig()
-	cfg.APIKeys = []string{"secret-key"}
 	srv := newServer(cfg, &mockClient{})
 	defer srv.Close()
 
-	resp, body := get(t, srv, "/v1/profile?url=https://www.linkedin.com/in/ada", nil)
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("without a key status = %d", resp.StatusCode)
-	}
-	if code := decodeError(t, body).Error.Code; code != string(domain.CodeUnauthorized) {
-		t.Errorf("code = %q", code)
-	}
-
-	resp, _ = get(t, srv, "/v1/profile?url=https://www.linkedin.com/in/ada", map[string]string{"X-API-Key": "secret-key"})
+	resp, _ := get(t, srv, "/v1/profile?url=https://www.linkedin.com/in/ada", nil)
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("with a valid key status = %d", resp.StatusCode)
+		t.Errorf("status = %d", resp.StatusCode)
 	}
 }
 
@@ -333,25 +324,5 @@ func TestRateLimit(t *testing.T) {
 	}
 	if code := decodeError(t, body).Error.Code; code != string(domain.CodeRateLimited) {
 		t.Errorf("code = %q", code)
-	}
-}
-
-func TestPerKeyRateLimit(t *testing.T) {
-	cfg := baseConfig()
-	cfg.APIKeys = []string{"k1", "k2"}
-	// Keep the per-IP limit permissive so the per-key limit is what binds.
-	cfg.RateLimit = config.RateLimitConfig{Enabled: true, RPS: 1000, Burst: 1000, KeyRPS: 1, KeyBurst: 1}
-	srv := newServer(cfg, &mockClient{})
-	defer srv.Close()
-
-	path := "/v1/profile?url=https://www.linkedin.com/in/ada"
-	if resp, _ := get(t, srv, path, map[string]string{"X-API-Key": "k1"}); resp.StatusCode != http.StatusOK {
-		t.Fatalf("k1 first status = %d", resp.StatusCode)
-	}
-	if resp, _ := get(t, srv, path, map[string]string{"X-API-Key": "k1"}); resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("k1 second status = %d", resp.StatusCode)
-	}
-	if resp, _ := get(t, srv, path, map[string]string{"X-API-Key": "k2"}); resp.StatusCode != http.StatusOK {
-		t.Errorf("k2 should have its own budget, status = %d", resp.StatusCode)
 	}
 }

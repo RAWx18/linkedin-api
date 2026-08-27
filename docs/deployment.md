@@ -61,7 +61,7 @@ Three workflows live in [.github/workflows](../.github/workflows):
 
 Set these repository secrets for deployment: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`,
-`LINKEDIN_USER_AGENT`, and `API_KEYS`.
+and `LINKEDIN_USER_AGENT`.
 Then run the Deploy workflow with a resource group name.
 
 ## Manual deploy
@@ -86,8 +86,7 @@ az deployment group create -g linkedin-api-rg \
   -p containerImage="$acr.azurecr.io/linkedin-api:v1" \
      linkedInLiAt="$LINKEDIN_LI_AT" \
      linkedInJSessionID="$LINKEDIN_JSESSIONID" \
-     linkedInUserAgent="$LINKEDIN_USER_AGENT" \
-     apiKeys="$API_KEYS"
+    linkedInUserAgent="$LINKEDIN_USER_AGENT"
 ```
 
 Verify the deployment:
