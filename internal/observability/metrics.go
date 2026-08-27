@@ -39,6 +39,9 @@ type Metrics struct {
 	SessionHealthy   prometheus.Gauge
 	Coalesced        prometheus.Counter
 
+	CallerSessionInvalid    prometheus.Counter
+	CallerSessionsUnhealthy prometheus.Gauge
+
 	AuditWritten     prometheus.Counter
 	AuditDropped     prometheus.Counter
 	AuditWriteErrors prometheus.Counter
@@ -90,13 +93,15 @@ func NewMetrics() *Metrics {
 			Name: "upstream_rejected_total",
 			Help: "Requests rejected before reaching LinkedIn, labeled by reason (circuit_open|rate|concurrency).",
 		}, []string{"reason"}),
-		CircuitOpen:      newGauge("upstream_circuit_open", "Whether the upstream circuit breaker is open (1) or closed (0)."),
-		CircuitTrips:     newCounter("upstream_circuit_trips_total", "Total times the upstream circuit breaker has opened."),
-		SessionHealthy:   newGauge("upstream_session_healthy", "Whether the LinkedIn session is healthy (1) or unhealthy (0) after auth or challenge responses."),
-		Coalesced:        newCounter("upstream_requests_coalesced_total", "Requests served by coalescing onto an in-flight identical retrieval."),
-		AuditWritten:     newCounter("audit_events_written_total", "Total audit records durably written to the store."),
-		AuditDropped:     newCounter("audit_events_dropped_total", "Total audit records dropped because the write buffer was full."),
-		AuditWriteErrors: newCounter("audit_write_errors_total", "Total audit batch writes that failed."),
+		CircuitOpen:             newGauge("upstream_circuit_open", "Whether the upstream circuit breaker is open (1) or closed (0)."),
+		CircuitTrips:            newCounter("upstream_circuit_trips_total", "Total times the upstream circuit breaker has opened."),
+		SessionHealthy:          newGauge("upstream_session_healthy", "Whether the LinkedIn server session is healthy (1) or unhealthy (0) after auth or challenge responses."),
+		Coalesced:               newCounter("upstream_requests_coalesced_total", "Requests served by coalescing onto an in-flight identical retrieval."),
+		CallerSessionInvalid:    newCounter("caller_session_invalid_total", "Total caller-supplied sessions rejected by LinkedIn or fast-failed as already expired."),
+		CallerSessionsUnhealthy: newGauge("caller_sessions_unhealthy", "Number of caller sessions currently tracked as invalid or expired."),
+		AuditWritten:            newCounter("audit_events_written_total", "Total audit records durably written to the store."),
+		AuditDropped:            newCounter("audit_events_dropped_total", "Total audit records dropped because the write buffer was full."),
+		AuditWriteErrors:        newCounter("audit_write_errors_total", "Total audit batch writes that failed."),
 	}
 
 	reg.MustRegister(
@@ -105,6 +110,7 @@ func NewMetrics() *Metrics {
 		m.UpstreamAuthFailures, m.ParseFailures, m.Cache, m.Profiles,
 		m.UpstreamRejected, m.CircuitOpen, m.CircuitTrips, m.Coalesced,
 		m.SessionHealthy,
+		m.CallerSessionInvalid, m.CallerSessionsUnhealthy,
 		m.AuditWritten, m.AuditDropped, m.AuditWriteErrors,
 	)
 	return m

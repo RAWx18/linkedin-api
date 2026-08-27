@@ -30,6 +30,13 @@ const AnonymousKey = "anonymous"
 // OutcomeOK marks a successful upstream retrieval.
 const OutcomeOK = "ok"
 
+// Caller-session outcomes distinguish a rejected caller session from a session
+// already known to be expired, without ever naming the credential.
+const (
+	OutcomeCallerAuthFailed = "caller_session_auth_failed"
+	OutcomeCallerExpired    = "caller_session_expired"
+)
+
 // Record is one immutable audit row. It captures what happened to a request
 // without any secret material: the profile is identified by its normalized
 // public identifier rather than the full URL, and the caller by a non-reversible
@@ -40,6 +47,8 @@ type Record struct {
 	ClientIP        string
 	KeyID           string
 	ProfileID       string
+	CredentialMode  string
+	CredFP          string
 	Status          int
 	RateDecision    string
 	Cached          bool
@@ -72,6 +81,8 @@ const eventKey ctxKey = iota
 type Event struct {
 	mu              sync.Mutex
 	profileID       string
+	credentialMode  string
+	credFP          string
 	cached          bool
 	upstreamCalled  bool
 	upstreamOutcome string
@@ -101,6 +112,17 @@ func SetProfileID(ctx context.Context, id string) {
 	if e := FromContext(ctx); e != nil {
 		e.mu.Lock()
 		e.profileID = id
+		e.mu.Unlock()
+	}
+}
+
+// SetCredential records the request's credential mode and, for caller sessions,
+// the non-reversible fingerprint. It never receives or stores any raw credential.
+func SetCredential(ctx context.Context, mode, fingerprint string) {
+	if e := FromContext(ctx); e != nil {
+		e.mu.Lock()
+		e.credentialMode = mode
+		e.credFP = fingerprint
 		e.mu.Unlock()
 	}
 }
@@ -165,6 +187,8 @@ func (e *Event) Snapshot(base Record) Record {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	base.ProfileID = e.profileID
+	base.CredentialMode = e.credentialMode
+	base.CredFP = e.credFP
 	base.Cached = e.cached
 	base.UpstreamCalled = e.upstreamCalled
 	base.UpstreamOutcome = e.upstreamOutcome

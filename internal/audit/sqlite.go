@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS audit_events (
 	client_ip        TEXT    NOT NULL,
 	key_id           TEXT    NOT NULL,
 	profile_id       TEXT    NOT NULL,
+	credential_mode  TEXT    NOT NULL,
+	cred_fp          TEXT    NOT NULL,
 	status           INTEGER NOT NULL,
 	rate_decision    TEXT    NOT NULL,
 	cached           INTEGER NOT NULL,
@@ -40,9 +42,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_events(key_id, ts);
 
 const insertSQL = `
 INSERT INTO audit_events
-	(ts, request_id, client_ip, key_id, profile_id, status, rate_decision,
+	(ts, request_id, client_ip, key_id, profile_id, credential_mode, cred_fp, status, rate_decision,
 	 cached, upstream_called, upstream_outcome, retries, latency_ms, error_class)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 // Count is a single grouped tally, such as one profile or client and how many
 // requests it accounts for in the window.
@@ -112,6 +114,7 @@ func (s *SQLiteStore) Insert(ctx context.Context, batch []Record) error {
 		r := &batch[i]
 		if _, err := stmt.ExecContext(ctx,
 			r.Time.UnixMilli(), r.RequestID, r.ClientIP, r.KeyID, r.ProfileID,
+			r.CredentialMode, r.CredFP,
 			r.Status, r.RateDecision, boolToInt(r.Cached), boolToInt(r.UpstreamCalled),
 			r.UpstreamOutcome, r.Retries, r.Latency.Milliseconds(), r.ErrorClass,
 		); err != nil {
