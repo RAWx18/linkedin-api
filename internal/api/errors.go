@@ -28,7 +28,7 @@ func statusFor(code domain.Code) int {
 	switch code {
 	case domain.CodeInvalidRequest:
 		return http.StatusBadRequest
-	case domain.CodeUnauthorized:
+	case domain.CodeUnauthorized, domain.CodeCallerSessionInvalid:
 		return http.StatusUnauthorized
 	case domain.CodeProfileNotFound:
 		return http.StatusNotFound

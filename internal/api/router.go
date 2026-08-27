@@ -32,7 +32,7 @@ type Deps struct {
 func NewRouter(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
-	ph := &profileHandler{svc: d.Service}
+	ph := &profileHandler{svc: d.Service, allowCaller: d.Config.LinkedIn.AllowCallerSession}
 	hh := &healthHandler{ready: d.Ready}
 
 	var apiMW []middleware

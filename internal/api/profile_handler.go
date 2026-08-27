@@ -13,7 +13,8 @@ import (
 )
 
 type profileHandler struct {
-	svc *service.ProfileService
+	svc         *service.ProfileService
+	allowCaller bool
 }
 
 // handle validates the requested profile URL and returns the normalized profile.
@@ -28,8 +29,14 @@ func (h *profileHandler) handle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	cred, err := callerCredential(r, h.allowCaller)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
 	audit.SetProfileID(r.Context(), ref.PublicID)
-	result, err := h.svc.GetProfile(r.Context(), ref)
+	audit.SetCredential(r.Context(), string(cred.Mode()), cred.Fingerprint())
+	result, err := h.svc.GetProfile(r.Context(), ref, cred)
 	if err != nil {
 		writeError(w, r, err)
 		return

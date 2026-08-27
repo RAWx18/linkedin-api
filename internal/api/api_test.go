@@ -10,24 +10,45 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/garudexlabs/linkedin-api/internal/api"
 	"github.com/garudexlabs/linkedin-api/internal/config"
 	"github.com/garudexlabs/linkedin-api/internal/domain"
+	"github.com/garudexlabs/linkedin-api/internal/linkedin"
 	"github.com/garudexlabs/linkedin-api/internal/observability"
 	"github.com/garudexlabs/linkedin-api/internal/service"
 )
 
 type mockClient struct {
-	profile func() (json.RawMessage, error)
+	mu       sync.Mutex
+	calls    int
+	lastCred linkedin.Credential
+	profile  func() (json.RawMessage, error)
 }
 
-func (m *mockClient) FetchProfile(context.Context, string) (json.RawMessage, error) {
+func (m *mockClient) FetchProfile(_ context.Context, _ string, cred linkedin.Credential) (json.RawMessage, error) {
+	m.mu.Lock()
+	m.calls++
+	m.lastCred = cred
+	m.mu.Unlock()
 	if m.profile != nil {
 		return m.profile()
 	}
 	return json.RawMessage(`{"elements":[{"firstName":"Ada","lastName":"Lovelace","headline":"Math"}]}`), nil
+}
+
+func (m *mockClient) credential() linkedin.Credential {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastCred
+}
+
+func (m *mockClient) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
 }
 
 type noopCache struct{}
