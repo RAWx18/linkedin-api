@@ -6,6 +6,10 @@
 web/node_modules
 bin
 coverage.out
+audit.db
+audit.db-journal
+audit.db-wal
+audit.db-shm
 .env
 .env.*
 *.md
