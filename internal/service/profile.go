@@ -13,6 +13,7 @@ import (
 
 	"github.com/garudexlabs/linkedin-api/internal/audit"
 	"github.com/garudexlabs/linkedin-api/internal/domain"
+	"github.com/garudexlabs/linkedin-api/internal/linkedin"
 	"github.com/garudexlabs/linkedin-api/internal/linkedin/parse"
 	"github.com/garudexlabs/linkedin-api/internal/observability"
 	"github.com/garudexlabs/linkedin-api/internal/urlx"
@@ -24,9 +25,10 @@ const (
 )
 
 // LinkedInClient is the subset of the LinkedIn integration the service needs.
-// Declaring it here keeps the dependency inverted and easy to mock in tests.
+// Declaring it here keeps the dependency inverted and easy to mock in tests. The
+// credential selects which session authenticates the single request.
 type LinkedInClient interface {
-	FetchProfile(ctx context.Context, publicID string) (json.RawMessage, error)
+	FetchProfile(ctx context.Context, publicID string, cred linkedin.Credential) (json.RawMessage, error)
 }
 
 // Cache is the caching behavior the service relies on.
@@ -44,20 +46,22 @@ type NegativeCache interface {
 
 // Gate guards access to LinkedIn. Enter reserves capacity or returns an error
 // with no upstream work; the returned release must run with the operation's
-// final error so the gate can update its circuit breaker.
+// final error so the gate can update its circuit breaker. The mode lets the gate
+// keep server-session and caller-session failures isolated.
 type Gate interface {
-	Enter(ctx context.Context) (func(error), error)
+	Enter(ctx context.Context, mode domain.CredentialMode) (func(error), error)
 }
 
 // Deps holds the profile service dependencies.
 type Deps struct {
-	Client         LinkedInClient
-	Cache          Cache
-	Negative       NegativeCache
-	Gate           Gate
-	Metrics        *observability.Metrics
-	Logger         *slog.Logger
-	ProfileTimeout time.Duration
+	Client           LinkedInClient
+	Cache            Cache
+	Negative         NegativeCache
+	Gate             Gate
+	Metrics          *observability.Metrics
+	Logger           *slog.Logger
+	ProfileTimeout   time.Duration
+	CallerSessionTTL time.Duration
 }
 
 // ProfileService coordinates profile retrieval, protection, and normalization.
@@ -67,6 +71,7 @@ type ProfileService struct {
 	negative       NegativeCache
 	gate           Gate
 	group          singleflight.Group
+	callerHealth   *callerHealth
 	metrics        *observability.Metrics
 	logger         *slog.Logger
 	profileTimeout time.Duration
@@ -89,6 +94,7 @@ func NewProfileService(d Deps) *ProfileService {
 		cache:          d.Cache,
 		negative:       d.Negative,
 		gate:           d.Gate,
+		callerHealth:   newCallerHealth(d.CallerSessionTTL),
 		metrics:        d.Metrics,
 		logger:         d.Logger,
 		profileTimeout: d.ProfileTimeout,
@@ -97,7 +103,7 @@ func NewProfileService(d Deps) *ProfileService {
 
 type passthroughGate struct{}
 
-func (passthroughGate) Enter(context.Context) (func(error), error) {
+func (passthroughGate) Enter(context.Context, domain.CredentialMode) (func(error), error) {
 	return func(error) {}, nil
 }
 
@@ -106,11 +112,23 @@ type openNegative struct{}
 func (openNegative) Blocked(string) bool { return false }
 func (openNegative) Remember(string)     {}
 
-// GetProfile resolves a normalized profile for the validated reference. It
-// serves cached results, short-circuits known-missing profiles, and coalesces
-// concurrent identical lookups so at most one upstream retrieval runs per
-// profile. Every upstream retrieval passes through the gate.
-func (s *ProfileService) GetProfile(ctx context.Context, ref urlx.ProfileRef) (*domain.ProfileResult, error) {
+// GetProfile resolves a normalized profile for the validated reference using the
+// selected credential. Server-session requests are cached, negatively cached, and
+// coalesced so at most one upstream retrieval runs per profile. Caller-session
+// requests are fully isolated: they never read or write the shared caches, never
+// coalesce with any other request, and are fast-failed while that caller's
+// session is known to be rejected, so one caller's data or session state can
+// never affect the server session or another caller.
+func (s *ProfileService) GetProfile(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, error) {
+	if cred.IsCaller() {
+		return s.getCaller(ctx, ref, cred)
+	}
+	return s.getServer(ctx, ref, cred)
+}
+
+// getServer serves a server-session request through the shared cache, negative
+// cache, and single-flight coalescing.
+func (s *ProfileService) getServer(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, error) {
 	if cached, ok := s.cache.Get(ref.PublicID); ok {
 		s.metrics.Cache.WithLabelValues("hit").Inc()
 		audit.MarkCacheHit(ctx)
@@ -125,7 +143,7 @@ func (s *ProfileService) GetProfile(ctx context.Context, ref urlx.ProfileRef) (*
 	s.metrics.Cache.WithLabelValues("miss").Inc()
 
 	v, err, shared := s.group.Do(ref.PublicID, func() (any, error) {
-		return s.retrieve(ctx, ref)
+		return s.retrieve(ctx, ref, cred)
 	})
 	if shared {
 		s.metrics.Coalesced.Inc()
@@ -138,20 +156,20 @@ func (s *ProfileService) GetProfile(ctx context.Context, ref urlx.ProfileRef) (*
 	return v.(*domain.ProfileResult), nil
 }
 
-// retrieve performs one guarded upstream retrieval for a cache miss. It is the
-// single-flight leader body, so it also populates the caches on the way out. The
-// lookup runs under its own deadline covering the whole retrieval.
-func (s *ProfileService) retrieve(ctx context.Context, ref urlx.ProfileRef) (*domain.ProfileResult, error) {
+// retrieve performs one guarded server-session retrieval for a cache miss. It is
+// the single-flight leader body, so it also populates the caches on the way out.
+// The lookup runs under its own deadline covering the whole retrieval.
+func (s *ProfileService) retrieve(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.profileTimeout)
 	defer cancel()
 
-	release, err := s.gate.Enter(ctx)
+	release, err := s.gate.Enter(ctx, domain.ModeServer)
 	if err != nil {
 		return nil, err
 	}
 	audit.MarkUpstreamCalled(ctx)
 
-	result, ferr := s.fetchAndParse(ctx, ref)
+	result, ferr := s.fetchAndParse(ctx, ref, cred)
 	release(ferr)
 
 	if ferr != nil {
@@ -166,9 +184,68 @@ func (s *ProfileService) retrieve(ctx context.Context, ref urlx.ProfileRef) (*do
 	return result, nil
 }
 
-// fetchAndParse makes the base profile call and normalizes it.
-func (s *ProfileService) fetchAndParse(ctx context.Context, ref urlx.ProfileRef) (*domain.ProfileResult, error) {
-	raw, err := s.client.FetchProfile(ctx, ref.PublicID)
+// getCaller performs one fully isolated caller-session retrieval. It shares no
+// cache, negative cache, or coalescing with any other request. A caller session
+// LinkedIn has already rejected is fast-failed with no upstream traffic, no
+// retry, and no fallback to the server session; a fresh caller session (a new
+// fingerprint) is processed normally, subject to all shared upstream limits.
+func (s *ProfileService) getCaller(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, error) {
+	fp := cred.Fingerprint()
+	if s.callerHealth.unhealthy(fp) {
+		s.metrics.Profiles.WithLabelValues("failure").Inc()
+		s.metrics.CallerSessionInvalid.Inc()
+		audit.SetUpstreamOutcome(ctx, audit.OutcomeCallerExpired)
+		return nil, errCallerSessionInvalid()
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, s.profileTimeout)
+	defer cancel()
+
+	release, err := s.gate.Enter(ctx, domain.ModeCaller)
+	if err != nil {
+		s.metrics.Profiles.WithLabelValues("failure").Inc()
+		return nil, err
+	}
+	audit.MarkUpstreamCalled(ctx)
+
+	result, ferr := s.fetchAndParse(ctx, ref, cred)
+	release(ferr)
+
+	if ferr != nil {
+		s.metrics.Profiles.WithLabelValues("failure").Inc()
+		if de, ok := domain.AsError(ferr); ok && de.Code == domain.CodeUpstreamAuthFailed {
+			s.callerHealth.markUnhealthy(fp)
+			s.updateCallerGauge()
+			s.metrics.CallerSessionInvalid.Inc()
+			audit.SetUpstreamOutcome(ctx, audit.OutcomeCallerAuthFailed)
+			return nil, errCallerSessionInvalid()
+		}
+		audit.SetUpstreamOutcome(ctx, errCode(ferr))
+		return nil, ferr
+	}
+	s.callerHealth.clear(fp)
+	s.updateCallerGauge()
+	s.metrics.Profiles.WithLabelValues("success").Inc()
+	audit.SetUpstreamOutcome(ctx, audit.OutcomeOK)
+	return result, nil
+}
+
+func (s *ProfileService) updateCallerGauge() {
+	if s.metrics != nil {
+		s.metrics.CallerSessionsUnhealthy.Set(float64(s.callerHealth.tracked()))
+	}
+}
+
+// errCallerSessionInvalid is the controlled response when a caller session is
+// rejected or already known to be expired. It carries no credential material.
+func errCallerSessionInvalid() error {
+	return domain.CallerSessionInvalid("the supplied LinkedIn session is invalid or expired; provide a fresh authorized session")
+}
+
+// fetchAndParse makes the base profile call with the given credential and
+// normalizes it.
+func (s *ProfileService) fetchAndParse(ctx context.Context, ref urlx.ProfileRef, cred linkedin.Credential) (*domain.ProfileResult, error) {
+	raw, err := s.client.FetchProfile(ctx, ref.PublicID, cred)
 	if err != nil {
 		return nil, err
 	}
