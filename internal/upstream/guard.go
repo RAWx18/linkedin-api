@@ -34,10 +34,12 @@ type Config struct {
 
 // Guard is the single choke point in front of LinkedIn. It enforces an aggregate
 // request rate and a concurrency ceiling, and trips a circuit breaker after
-// repeated upstream failures. Authentication and challenge responses are treated
-// as a likely session invalidation: the breaker trips after fewer of them and
-// stays open far longer, so a dead or challenged session is not hammered into
-// deeper trouble.
+// repeated upstream failures. The breaker is split in two: a general breaker for
+// transient failures and rate limits that gates all traffic, and a session
+// breaker for authentication and challenge responses on the server session that
+// gates only server-session traffic. Caller-supplied sessions carry their own
+// credentials, so a dead server session never blocks them, and one caller's
+// invalid session never trips the shared breaker.
 type Guard struct {
 	sem     chan struct{}
 	limiter *rate.Limiter
@@ -46,7 +48,7 @@ type Guard struct {
 	now     func() time.Time
 }
 
-// New builds a Guard from cfg. The session starts healthy.
+// New builds a Guard from cfg. The server session starts healthy.
 func New(cfg Config, metrics *observability.Metrics, logger *slog.Logger) *Guard {
 	if metrics != nil {
 		metrics.SessionHealthy.Set(1)
@@ -55,25 +57,23 @@ func New(cfg Config, metrics *observability.Metrics, logger *slog.Logger) *Guard
 		sem:     make(chan struct{}, cfg.MaxConcurrency),
 		limiter: rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
 		breaker: &breaker{
-			threshold:        cfg.FailureThreshold,
-			cooldown:         cfg.Cooldown,
-			sessionThreshold: cfg.SessionThreshold,
-			sessionCooldown:  cfg.SessionCooldown,
-			metrics:          metrics,
-			logger:           logger,
+			general: subBreaker{threshold: cfg.FailureThreshold, cooldown: cfg.Cooldown},
+			session: subBreaker{threshold: cfg.SessionThreshold, cooldown: cfg.SessionCooldown, grow: true},
+			metrics: metrics,
+			logger:  logger,
 		},
 		metrics: metrics,
 		now:     time.Now,
 	}
 }
 
-// Enter reserves capacity for one upstream operation. It returns a domain error
-// and does no upstream work when the breaker is open, the aggregate rate is
-// exceeded, or the concurrency ceiling is reached. On success it returns a
-// release function that must be called with the operation's final error to free
-// the slot and update the breaker.
-func (g *Guard) Enter(_ context.Context) (func(error), error) {
-	if retryAfter, open := g.breaker.blocked(g.now()); open {
+// Enter reserves capacity for one upstream operation in the given credential
+// mode. It returns a domain error and does no upstream work when the breaker is
+// open for that mode, the aggregate rate is exceeded, or the concurrency ceiling
+// is reached. On success it returns a release function that must be called with
+// the operation's final error to free the slot and update the breaker.
+func (g *Guard) Enter(_ context.Context, mode domain.CredentialMode) (func(error), error) {
+	if retryAfter, open := g.breaker.blocked(g.now(), mode); open {
 		g.reject("circuit_open")
 		e := domain.UpstreamUnavailable(errors.New("upstream circuit open"))
 		e.RetryAfter = retryAfter
@@ -94,7 +94,7 @@ func (g *Guard) Enter(_ context.Context) (func(error), error) {
 	return func(opErr error) {
 		once.Do(func() {
 			<-g.sem
-			g.breaker.record(opErr, g.now())
+			g.breaker.record(opErr, g.now(), mode)
 		})
 	}, nil
 }
@@ -105,144 +105,219 @@ func (g *Guard) reject(reason string) {
 	}
 }
 
-// breaker is a three-state circuit breaker. It opens after a threshold of
-// consecutive trip-worthy failures, blocks for a cooldown, then lets a single
-// probe through. Session failures use a separate, smaller threshold and a
-// longer, exponentially growing cooldown.
-type breaker struct {
-	mu               sync.Mutex
-	threshold        int
-	cooldown         time.Duration
-	sessionThreshold int
-	sessionCooldown  time.Duration
-	metrics          *observability.Metrics
-	logger           *slog.Logger
+// failCat classifies an operation result for the breaker.
+type failCat int
 
-	failures        int
-	sessionFailures int
-	sessionStrikes  int
-	openUntil       time.Time
-	probing         bool
-	open            bool
-	unhealthy       bool
+const (
+	catNone    failCat = iota // success, not-found, or client error: no upstream fault
+	catGeneral                // transient failure or rate limit: an upstream-wide fault
+	catAuth                   // authentication or challenge: a session-specific fault
+)
+
+func classify(err error) failCat {
+	de, ok := domain.AsError(err)
+	if !ok {
+		return catNone
+	}
+	switch de.Code {
+	case domain.CodeUpstreamAuthFailed:
+		return catAuth
+	case domain.CodeUpstreamRateLimited, domain.CodeUpstreamUnavailable,
+		domain.CodeUpstreamTimeout, domain.CodeUpstreamParseError:
+		return catGeneral
+	default:
+		return catNone
+	}
 }
 
-// blocked reports whether calls are currently blocked and a Retry-After hint in
-// seconds. Once the cooldown elapses it admits exactly one probe at a time.
-func (b *breaker) blocked(now time.Time) (int, bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.openUntil.IsZero() {
+func retryAfterOf(err error) int {
+	if de, ok := domain.AsError(err); ok {
+		return de.RetryAfter
+	}
+	return 0
+}
+
+// subBreaker is a single three-state circuit breaker: it opens after a threshold
+// of consecutive failures, blocks for a cooldown, then admits one probe at a
+// time. When grow is set the cooldown doubles on each successive trip.
+type subBreaker struct {
+	threshold int
+	cooldown  time.Duration
+	grow      bool
+
+	failures  int
+	strikes   int
+	openUntil time.Time
+	probing   bool
+	open      bool
+}
+
+// blocking reports whether the sub-breaker currently blocks and a Retry-After
+// hint, without mutating probe state.
+func (s *subBreaker) blocking(now time.Time) (int, bool) {
+	if s.openUntil.IsZero() {
 		return 0, false
 	}
-	if now.Before(b.openUntil) {
-		return retryAfterSeconds(b.openUntil, now), true
+	if now.Before(s.openUntil) {
+		return retryAfterSeconds(s.openUntil, now), true
 	}
-	if b.probing {
+	if s.probing {
 		return 1, true
 	}
-	b.probing = true
 	return 0, false
 }
 
-// record feeds an operation result back into the breaker.
-func (b *breaker) record(err error, now time.Time) {
+// canProbe reports whether the cooldown has elapsed and no probe is in flight.
+func (s *subBreaker) canProbe(now time.Time) bool {
+	return !s.openUntil.IsZero() && !now.Before(s.openUntil) && !s.probing
+}
+
+func (s *subBreaker) fail(now time.Time, retryAfter int) {
+	s.failures++
+	if s.failures >= s.threshold {
+		s.trip(now, retryAfter)
+	}
+}
+
+func (s *subBreaker) trip(now time.Time, retryAfter int) {
+	cd := s.cooldown
+	if s.grow {
+		if s.strikes < maxSessionStrikes {
+			s.strikes++
+		}
+		cd = s.cooldown << (s.strikes - 1)
+	}
+	if ra := time.Duration(retryAfter) * time.Second; ra > cd {
+		cd = ra
+	}
+	s.openUntil = now.Add(cd)
+	s.failures = 0
+	s.open = true
+}
+
+func (s *subBreaker) close() {
+	s.openUntil = time.Time{}
+	s.failures = 0
+	s.strikes = 0
+	s.open = false
+}
+
+// probeResult resolves an in-flight probe: a matching failure reopens the
+// breaker, anything else closes it.
+func (s *subBreaker) probeResult(now time.Time, failed bool, retryAfter int) {
+	s.probing = false
+	if failed {
+		s.trip(now, retryAfter)
+	} else {
+		s.close()
+	}
+}
+
+// breaker composes the general and session sub-breakers and owns the shared
+// circuit and session-health metrics.
+type breaker struct {
+	mu      sync.Mutex
+	general subBreaker
+	session subBreaker
+	metrics *observability.Metrics
+	logger  *slog.Logger
+}
+
+// blocked reports whether calls in the given mode are blocked and a Retry-After
+// hint. The general breaker gates every mode; the session breaker gates only
+// server-session traffic, so a dead server session never blocks caller sessions.
+// When nothing blocks it admits at most one probe, preferring the general
+// breaker since it gates all traffic.
+func (b *breaker) blocked(now time.Time, mode domain.CredentialMode) (int, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.probing {
-		b.probing = false
-		if tripworthy(err) {
-			b.trip(err, now, b.isSession(err))
-		} else {
-			b.reset()
+	if ra, blk := b.general.blocking(now); blk {
+		return ra, true
+	}
+	if mode == domain.ModeServer {
+		if ra, blk := b.session.blocking(now); blk {
+			return ra, true
 		}
-		return
 	}
-	if !tripworthy(err) {
-		b.failures = 0
-		b.sessionFailures = 0
-		return
+	if b.general.canProbe(now) {
+		b.general.probing = true
+	} else if mode == domain.ModeServer && b.session.canProbe(now) {
+		b.session.probing = true
 	}
-	if b.isSession(err) {
-		b.sessionFailures++
-		if b.sessionFailures >= b.sessionThreshold {
-			b.trip(err, now, true)
-		}
-		return
-	}
-	b.failures++
-	if b.failures >= b.threshold {
-		b.trip(err, now, false)
-	}
+	return 0, false
 }
 
-// isSession reports whether an error is an authentication or challenge response
-// and session handling is configured.
-func (b *breaker) isSession(err error) bool {
-	if b.sessionThreshold < 1 {
-		return false
+// record feeds an operation result back into the breakers. A general failure or
+// rate limit feeds the general breaker for any mode. An authentication failure
+// feeds the session breaker only for server-mode requests; a caller-mode
+// authentication failure is handled by the caller-session health tracker and is
+// deliberately ignored here so it can never trip the shared breaker.
+func (b *breaker) record(err error, now time.Time, mode domain.CredentialMode) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	prevGeneralOpen := b.general.open
+	prevSessionOpen := b.session.open
+
+	cat := classify(err)
+	retryAfter := retryAfterOf(err)
+
+	switch {
+	case b.general.probing:
+		b.general.probeResult(now, cat == catGeneral, retryAfter)
+	case cat == catGeneral:
+		b.general.fail(now, retryAfter)
+	case cat == catNone:
+		b.general.failures = 0
 	}
-	de, ok := domain.AsError(err)
-	return ok && de.Code == domain.CodeUpstreamAuthFailed
+
+	if mode == domain.ModeServer {
+		switch {
+		case b.session.probing:
+			b.session.probeResult(now, cat == catAuth, retryAfter)
+		case cat == catAuth:
+			b.session.fail(now, retryAfter)
+		case cat == catNone:
+			b.session.failures = 0
+		}
+	}
+
+	b.sync(now, prevGeneralOpen, prevSessionOpen)
 }
 
-// trip opens the breaker. The caller holds the lock. A session failure extends
-// the cooldown exponentially and marks the session unhealthy; a rate-limit
-// error's Retry-After extends whichever cooldown so LinkedIn's own backoff wins.
-func (b *breaker) trip(err error, now time.Time, session bool) {
-	cooldown := b.cooldown
-	if session {
-		if b.sessionStrikes < maxSessionStrikes {
-			b.sessionStrikes++
-		}
-		cooldown = b.sessionCooldown << (b.sessionStrikes - 1)
-	}
-	if de, ok := domain.AsError(err); ok && de.RetryAfter > 0 {
-		if ra := time.Duration(de.RetryAfter) * time.Second; ra > cooldown {
-			cooldown = ra
-		}
-	}
-	b.openUntil = now.Add(cooldown)
-	b.failures = 0
-	b.sessionFailures = 0
-	if !b.open {
-		b.open = true
-		if b.metrics != nil {
-			b.metrics.CircuitOpen.Set(1)
+// sync reconciles the shared circuit and session-health metrics and logs after a
+// state change.
+func (b *breaker) sync(now time.Time, prevGeneralOpen, prevSessionOpen bool) {
+	if b.metrics != nil {
+		if b.general.open && !prevGeneralOpen {
 			b.metrics.CircuitTrips.Inc()
 		}
-	}
-	if session && !b.unhealthy {
-		b.unhealthy = true
-		if b.metrics != nil {
-			b.metrics.SessionHealthy.Set(0)
+		if b.session.open && !prevSessionOpen {
+			b.metrics.CircuitTrips.Inc()
 		}
-		if b.logger != nil {
-			b.logger.Warn("linkedin session appears unhealthy; pausing upstream requests", "cooldown", cooldown.String())
+		open := b.general.open || b.session.open
+		if open != (prevGeneralOpen || prevSessionOpen) {
+			if open {
+				b.metrics.CircuitOpen.Set(1)
+			} else {
+				b.metrics.CircuitOpen.Set(0)
+			}
 		}
-	}
-}
-
-// reset closes the breaker and restores session health. The caller holds the lock.
-func (b *breaker) reset() {
-	b.openUntil = time.Time{}
-	b.failures = 0
-	b.sessionFailures = 0
-	b.sessionStrikes = 0
-	if b.open {
-		b.open = false
-		if b.metrics != nil {
-			b.metrics.CircuitOpen.Set(0)
+		if b.session.open != prevSessionOpen {
+			if b.session.open {
+				b.metrics.SessionHealthy.Set(0)
+			} else {
+				b.metrics.SessionHealthy.Set(1)
+			}
 		}
 	}
-	if b.unhealthy {
-		b.unhealthy = false
-		if b.metrics != nil {
-			b.metrics.SessionHealthy.Set(1)
-		}
-		if b.logger != nil {
-			b.logger.Info("linkedin session recovered")
+	if b.logger != nil && b.session.open != prevSessionOpen {
+		if b.session.open {
+			b.logger.Warn("linkedin server session appears unhealthy; pausing server-session upstream requests",
+				"cooldown_seconds", retryAfterSeconds(b.session.openUntil, now))
+		} else {
+			b.logger.Info("linkedin server session recovered")
 		}
 	}
 }
@@ -252,23 +327,4 @@ func retryAfterSeconds(until, now time.Time) int {
 		return d
 	}
 	return 1
-}
-
-// tripworthy reports whether an error indicates an upstream problem that should
-// count toward opening the breaker. Client-side and not-found errors do not.
-func tripworthy(err error) bool {
-	de, ok := domain.AsError(err)
-	if !ok {
-		return false
-	}
-	switch de.Code {
-	case domain.CodeUpstreamAuthFailed,
-		domain.CodeUpstreamRateLimited,
-		domain.CodeUpstreamUnavailable,
-		domain.CodeUpstreamTimeout,
-		domain.CodeUpstreamParseError:
-		return true
-	default:
-		return false
-	}
 }
