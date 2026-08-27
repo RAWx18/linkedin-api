@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Ryan Madhuwala
+# SPDX-License-Identifier: MIT
+
+services:
+  linkedin-api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: linkedin-api:latest
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    restart: unless-stopped

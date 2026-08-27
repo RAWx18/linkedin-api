@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Ryan Madhuwala
+# SPDX-License-Identifier: MIT
+
+.git
+.github
+web/node_modules
+bin
+coverage.out
+.env
+.env.*
+*.md
+deploy/bicep
