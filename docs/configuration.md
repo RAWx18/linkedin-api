@@ -24,6 +24,8 @@ template is in [.env.example](../.env.example).
 | `HTTP_MAX_RETRIES` | `2` | no | Retries for transient upstream failures |
 | `HTTP_RETRY_BACKOFF` | `300ms` | no | Base backoff, grows with jitter |
 | `PROFILE_TIMEOUT` | `15s` | no | Deadline for a whole profile lookup across its upstream calls |
+| `PROFILE_SECTIONS` | `experience,education` | no | Optional sections fetched after the core profile. Allowed: `experience`, `education`, `skills`, `certifications`, `languages`, `volunteer`, `projects`, `test_scores` |
+| `ENRICHMENT_CONCURRENCY` | `4` | no | Maximum section requests fetched concurrently across the service |
 | `LINKEDIN_ALLOW_CALLER_SESSION` | `true` | no | Allow callers to supply their own session via the `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID` headers |
 | `CACHE_ENABLED` | `true` | no | Enable the in-memory cache |
 | `CACHE_TTL` | `10m` | no | Cache entry lifetime |

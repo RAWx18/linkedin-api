@@ -101,19 +101,40 @@ are omitted when absent; the parser never invents values. Identity fields, the
 public identifier and canonical URL, come from the validated request, not the
 response body.
 
-### What is not included
+### Profile sections
 
-The `q=memberIdentity` finder returns the top-card only. Detailed sections such as
-experience, education, skills, certifications, languages, and recommendations are
-not in this response; the card references them by separate card urns
-(`experienceCardUrn`, `educationCardUrn`) that resolve through additional Voyager
-card queries. Those queries rely on versioned internal decoration and GraphQL
-query identifiers that are not stable to reproduce without guessing, so this
-service does not fetch them and does not fabricate the sections. Adding them later
-means capturing real sanitized fixtures for each card, then normalizing them
-behind optional, bounded, concurrent enrichment with its own deadline, so a slow
-or missing section can never delay or fail the core profile. The current response
-maximizes the real data available from the one stable endpoint.
+The `q=memberIdentity` finder returns the top-card only. Detailed sections are
+retrieved separately, after the core profile, from LinkedIn's DASH REST API keyed
+by the profile URN (`entityUrn`) the top-card already returns:
+
+    GET /voyager/api/identity/dash/profile{Section}?q=viewee&profileUrn={urn}
+
+sent with `Accept: application/vnd.linkedin.normalized+json+2.1`, which returns a
+normalized `data`/`included` document. The `data["*elements"]` array gives the
+ordered entity URNs; each is resolved from `included`, so LinkedIn's ordering is
+preserved. Supported sections and their resources:
+
+| Section | Resource |
+| --- | --- |
+| `experience` | `profilePositions` |
+| `education` | `profileEducations` |
+| `skills` | `profileSkills` |
+| `certifications` | `profileCertifications` |
+| `languages` | `profileLanguages` |
+| `volunteer` | `profileVolunteerExperiences` |
+| `projects` | `profileProjects` |
+| `test_scores` | `profileTestScores` |
+
+These calls are deterministic, one request per section, and use the same
+authenticated session and headers as the core call: no browser automation, no
+server-driven UI, and no ephemeral page tokens. Experience and education are
+fetched by default; the rest are enabled with `PROFILE_SECTIONS`. Enrichment is
+optional and failure-isolated: each section runs through the shared upstream gate
+(rate limit, breaker, concurrency), bounded by a global semaphore
+(`ENRICHMENT_CONCURRENCY`) and the overall `PROFILE_TIMEOUT`. Any error, timeout,
+or empty result is recorded in `meta.sections` (`ok`, `empty`, or `unavailable`)
+without affecting the core profile. The parser never fabricates values, and
+sections that would require server-driven UI or unstable tokens are not used.
 
 ## Timeouts and retries
 

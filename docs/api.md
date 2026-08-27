@@ -82,6 +82,7 @@ Response:
     "headline": "Chair, Gates Foundation and Founder, Breakthrough Energy",
     "summary": "Chair of the Gates Foundation. Founder of Breakthrough Energy.",
     "profile_language": "en_US",
+    "supported_locales": ["en_US"],
     "location": { "country_code": "US" },
     "profile_picture": {
       "url": "https://media.licdn.com/dms/image/v2/example/800_800/pic.jpg",
@@ -99,13 +100,30 @@ Response:
     "influencer": true,
     "premium": true,
     "creator": true,
-    "top_voice": true
+    "top_voice": true,
+    "created_at": "2013-05-02T19:09:40Z",
+    "experience": [
+      {
+        "title": "Co-chair",
+        "company": "Gates Foundation",
+        "company_url": "https://www.linkedin.com/company/8736/",
+        "date_range": { "start": { "year": 2000 } }
+      }
+    ],
+    "education": [
+      {
+        "school": "Harvard University",
+        "school_url": "https://www.linkedin.com/school/18483/",
+        "date_range": { "start": { "year": 1973 }, "end": { "year": 1975 } }
+      }
+    ]
   },
   "meta": {
     "retrieved_at": "2026-08-27T09:30:00Z",
-    "schema_version": "2.1",
+    "schema_version": "2.2",
     "source": "linkedin",
-    "cached": false
+    "cached": false,
+    "sections": { "experience": "ok", "education": "ok" }
   }
 }
 ```
@@ -138,6 +156,7 @@ is in [openapi.yaml](../api/openapi.yaml). Notes:
 - `public_identifier` and `profile_url` are always present. Other scalars are
   omitted when absent, and arrays are omitted when empty.
 - `profile_language` is the profile's primary locale, such as `en_US`.
+- `supported_locales` lists every locale the profile publishes content in.
 - `location` exposes `country_code`, and `text` when a full place name is
   available.
 - `profile_picture` and `background_image` expose `url` (the largest rendition)
@@ -146,13 +165,22 @@ is in [openapi.yaml](../api/openapi.yaml). Notes:
   the member's creator profile when present.
 - `verified`, `influencer`, `premium`, `creator`, `top_voice`, `student`, and
   `memorialized` appear only when true.
+- `created_at` is when LinkedIn created the profile, when the source provides it.
+- `experience`, `education`, `skills`, `certifications`, `languages`,
+  `volunteer_experience`, `projects`, and `test_scores` are optional sections.
+  Experience and education are returned by default; the rest are enabled with
+  `PROFILE_SECTIONS`. Each entry carries only the fields LinkedIn provides, such
+  as titles, organizations with `company_url`/`school_url`, a typed `date_range`,
+  and descriptions.
+- `meta.sections` reports the retrieval status of each attempted section as `ok`,
+  `empty`, or `unavailable`.
 - `meta.cached` is true when the result came from the cache. `meta.source` is
   `linkedin`, and `meta.schema_version` tracks the response contract.
 
-The response is the identity top-card the base profile endpoint returns. Detailed
-sections such as experience, education, skills, and certifications are served by
-separate Voyager cards that this service does not fetch, so they are not included.
-The rationale is in [reverse-engineering.md](reverse-engineering.md).
+Detailed sections are fetched from LinkedIn's DASH section endpoints after the
+core profile, bounded and failure-isolated, and enabled through `PROFILE_SECTIONS`.
+The rationale and endpoint details are in
+[reverse-engineering.md](reverse-engineering.md).
 
 ## Health and metrics
 

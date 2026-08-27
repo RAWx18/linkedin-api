@@ -3,9 +3,10 @@
 - The internal profile API is undocumented. Endpoint shapes can change and reduce
   the fields returned until the parser is updated. See
   [reverse-engineering.md](reverse-engineering.md).
-- The response covers the member's identity and top-card fields and reflects what
-  the configured session can see. See [Profile section coverage](#profile-section-coverage)
-  for a section-by-section audit.
+- The response covers the member's identity and top-card fields, plus optional
+  experience, education, and other sections, and reflects what the configured
+  session can see. See [Profile section coverage](#profile-section-coverage) for a
+  section-by-section audit.
 - LinkedIn rate limiting is respected, not worked around. A `429` is surfaced with
   `Retry-After` and is not retried.
 - Session cookies expire. Refresh `LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID` when
@@ -30,29 +31,27 @@
 
 ## Profile section coverage
 
-Each lookup issues one upstream request,
-`GET /voyager/api/identity/dash/profiles?q=memberIdentity`, which returns the
-profile top-card. The table maps each profile section to that response.
+Each lookup issues one core request,
+`GET /voyager/api/identity/dash/profiles?q=memberIdentity` (the top-card), then
+optional per-section DASH requests (see
+[reverse-engineering.md](reverse-engineering.md)). The table maps each section to
+how it is retrieved.
 
 | Section | Status | Source |
 | --- | --- | --- |
 | Identity: name, headline, summary, public id, canonical url | Retrieved | top-card |
 | Profile and background images, with sized variants | Retrieved | top-card |
-| Profile language, country code | Retrieved | top-card (`primaryLocale`, `location`) |
+| Profile language, supported locales, country code, created time | Retrieved | top-card |
 | Websites, creator website, creator topics | Retrieved | top-card |
 | Flags: verified, influencer, premium, creator, top_voice, student, memorialized | Retrieved | top-card |
-| Experience | Unavailable | separate card request (`experienceCardUrn`) |
-| Education | Unavailable | separate card request (`educationCardUrn`) |
-| Skills, certifications, languages, projects, publications, honors and awards, volunteer, courses, organizations, test scores, causes, interests | Unavailable | separate profile-cards request (other card types) |
-| Recommendations | Unavailable | separate recommendations request |
-| Contact info: email, phone, twitter | Unavailable | `twitterHandles` exists on the top-card but is empty for the audited profile; the rest needs the contact-info request |
+| Experience, Education | Retrieved (default) | DASH `profilePositions`, `profileEducations` |
+| Skills, Certifications, Languages, Volunteer, Projects, Test scores | Retrieved (opt-in) | DASH section endpoints, enabled with `PROFILE_SECTIONS` |
+| Recommendations, Honors, Publications, Courses, Organizations, Patents, Interests, Causes | Not modeled | DASH endpoints exist but were not verified with populated responses, so they are not parsed |
+| Contact info: email, phone, twitter | Not exposed | needs the contact-info request; not implemented |
 | Follower and connection counts | Not exposed | the top-card carries only a `showFollowerCount` flag, no count value |
-| Industry name, human-readable location | Not resolvable | the top-card carries only opaque urns (`industryUrn`, `geoLocation.geoUrn`) with no names |
+| Industry name, human-readable location | Not resolvable | the top-card carries only opaque urns with no names |
 
-Sections marked unavailable are not present in the top-card response. Retrieving
-them requires additional Voyager card requests keyed by the card urns, which use
-versioned internal decoration and GraphQL query identifiers. The service does not
-issue those requests or fabricate the sections. See
-[reverse-engineering.md](reverse-engineering.md) for the bounded, concurrent,
-failure-tolerant enrichment design that would add them once real sanitized
-fixtures for each card are captured.
+Optional sections are failure-isolated: `meta.sections` reports each attempted
+section as `ok`, `empty`, or `unavailable`, and any failure leaves the core
+profile intact. Sections that would require server-driven UI or unstable page
+tokens are not used, and the parser never fabricates values.
