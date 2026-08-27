@@ -5,9 +5,9 @@ import './style.css';
 
 const form = document.querySelector<HTMLFormElement>('#form')!;
 const urlInput = document.querySelector<HTMLInputElement>('#url')!;
-const keyInput = document.querySelector<HTMLInputElement>('#apiKey')!;
 const liAtInput = document.querySelector<HTMLInputElement>('#liAt')!;
 const jsessionInput = document.querySelector<HTMLInputElement>('#jsession')!;
+const uaInput = document.querySelector<HTMLInputElement>('#jsUserAgent')!;
 const output = document.querySelector<HTMLElement>('#output')!;
 const statusLine = document.querySelector<HTMLElement>('#status')!;
 const submit = document.querySelector<HTMLButtonElement>('#submit')!;
@@ -31,6 +31,7 @@ interface Profile {
 
 interface Meta {
   retrieved_at: string;
+  schema_version: string;
   source: string;
   cached: boolean;
 }
@@ -64,7 +65,43 @@ function link(url: string, label: string): HTMLAnchorElement {
   return a;
 }
 
-function renderProfile(result: ProfileResult): void {
+function section(title: string, ...children: Node[]): HTMLElement {
+  const block = el('section', 'block');
+  block.append(el('h3', undefined, title), ...children);
+  return block;
+}
+
+function jsonViewer(raw: string): HTMLElement {
+  const block = el('section', 'block json-block');
+  const bar = el('div', 'json-bar');
+  bar.append(el('h3', undefined, 'JSON response'));
+  const copy = el('button', 'copy-btn', 'Copy JSON');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(raw);
+      copy.textContent = 'Copied';
+      copy.classList.add('copied');
+    } catch {
+      copy.textContent = 'Copy failed';
+    }
+    setTimeout(() => {
+      copy.textContent = 'Copy JSON';
+      copy.classList.remove('copied');
+    }, 1500);
+  });
+  bar.append(copy);
+  let pretty = raw;
+  try {
+    pretty = JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    /* show the body as-is */
+  }
+  block.append(bar, el('pre', 'json-pre', pretty));
+  return block;
+}
+
+function renderProfile(result: ProfileResult, raw: string): void {
   const { data, meta } = result;
   output.replaceChildren();
   const card = el('article', 'card');
@@ -74,6 +111,7 @@ function renderProfile(result: ProfileResult): void {
     const img = el('img');
     img.src = data.background_image.url;
     img.alt = '';
+    img.loading = 'lazy';
     banner.append(img);
     card.append(banner);
   }
@@ -99,26 +137,17 @@ function renderProfile(result: ProfileResult): void {
   }
   idBox.append(nameRow);
   if (data.headline) idBox.append(el('p', 'headline', data.headline));
-
-  const bits: string[] = [];
   const place = data.location?.text || data.location?.country_code;
-  if (place) bits.push(place);
-  bits.push(meta.cached ? 'cached' : 'live');
-  idBox.append(el('p', 'sub', bits.join(' · ')));
+  if (place) idBox.append(el('p', 'sub', place));
   idBox.append(link(data.profile_url, data.profile_url));
   head.append(idBox);
   card.append(head);
 
   if (data.summary) {
-    const block = el('section', 'block');
-    block.append(el('h3', undefined, 'About'));
-    block.append(el('p', 'summary', data.summary));
-    card.append(block);
+    card.append(section('About', el('p', 'summary', data.summary)));
   }
 
   if (data.websites?.length) {
-    const block = el('section', 'block');
-    block.append(el('h3', undefined, 'Websites'));
     const list = el('ul', 'links');
     for (const w of data.websites) {
       const item = el('li');
@@ -126,15 +155,24 @@ function renderProfile(result: ProfileResult): void {
       if (w.category) item.append(el('span', 'muted', ` ${w.category.toLowerCase()}`));
       list.append(item);
     }
-    block.append(list);
-    card.append(block);
+    card.append(section('Websites', list));
   }
 
-  const details = el('details', 'raw');
-  details.append(el('summary', undefined, 'Raw JSON'));
-  details.append(el('pre', undefined, JSON.stringify(result, null, 2)));
-  card.append(details);
+  const metaRow = el('div', 'meta-row');
+  const rows: [string, string][] = [
+    ['retrieved', new Date(meta.retrieved_at).toLocaleString()],
+    ['source', meta.source],
+    ['schema', meta.schema_version],
+    ['served', meta.cached ? 'cache' : 'live'],
+  ];
+  for (const [term, value] of rows) {
+    const chip = el('span', 'meta-chip');
+    chip.append(el('span', 'k', term), el('span', 'v', value));
+    metaRow.append(chip);
+  }
+  card.append(section('Metadata', metaRow));
 
+  card.append(jsonViewer(raw));
   output.append(card);
 }
 
@@ -151,6 +189,15 @@ function renderError(raw: string): void {
     /* leave the raw body as-is */
   }
   output.append(el('div', 'error-box', message));
+}
+
+function renderLoading(): void {
+  output.replaceChildren();
+  const lines = el('div', 'skeleton-lines');
+  lines.append(el('div', 'skeleton-line wide'), el('div', 'skeleton-line'), el('div', 'skeleton-line narrow'));
+  const skeleton = el('div', 'skeleton');
+  skeleton.append(el('div', 'skeleton-avatar'), lines);
+  output.append(skeleton);
 }
 
 async function fetchProfile(event: SubmitEvent): Promise<void> {
@@ -170,26 +217,26 @@ async function fetchProfile(event: SubmitEvent): Promise<void> {
   }
 
   submit.disabled = true;
-  output.replaceChildren();
-  setStatus('Fetching...', 'pending');
+  setStatus('Fetching profile…', 'pending');
+  renderLoading();
 
   try {
     const headers: Record<string, string> = {};
-    const key = keyInput.value.trim();
-    if (key) {
-      headers['X-API-Key'] = key;
-    }
     if (liAt && jsession) {
       headers['X-LinkedIn-Li-At'] = liAt;
       headers['X-LinkedIn-JSESSIONID'] = jsession;
+      const ua = uaInput.value.trim();
+      if (ua) {
+        headers['X-LinkedIn-User-Agent'] = ua;
+      }
     }
 
     const response = await fetch(`/v1/profile?url=${encodeURIComponent(url)}`, { headers });
     const raw = await response.text();
 
     if (response.ok) {
-      renderProfile(JSON.parse(raw) as ProfileResult);
-      setStatus(`OK (${response.status})`, 'ok');
+      renderProfile(JSON.parse(raw) as ProfileResult, raw);
+      setStatus('Profile retrieved.', 'ok');
       return;
     }
 
@@ -201,12 +248,14 @@ async function fetchProfile(event: SubmitEvent): Promise<void> {
     }
     renderError(raw);
   } catch (err) {
+    output.replaceChildren();
     setStatus(`Request failed: ${(err as Error).message}`, 'error');
   } finally {
     submit.disabled = false;
-    // Never retain caller session cookies client-side.
+    // Never retain caller session credentials client-side.
     liAtInput.value = '';
     jsessionInput.value = '';
+    uaInput.value = '';
   }
 }
 

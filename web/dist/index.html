@@ -11,42 +11,55 @@
   </head>
   <body>
     <main class="app">
-      <header>
+      <header class="masthead">
         <h1>linkedin-api</h1>
-        <p class="subtitle">Fetch a normalized LinkedIn profile as JSON.</p>
+        <p class="tagline">Turn any public LinkedIn profile into clean, normalized JSON.</p>
       </header>
 
-      <form id="form" autocomplete="off">
-        <label for="url">Profile URL</label>
-        <input
-          id="url"
-          name="url"
-          type="text"
-          inputmode="url"
-          placeholder="https://www.linkedin.com/in/username"
-          required
-        />
+      <form id="form" class="fetch-form" autocomplete="off">
+        <div class="url-row">
+          <input
+            id="url"
+            name="url"
+            type="text"
+            inputmode="url"
+            placeholder="https://www.linkedin.com/in/username"
+            aria-label="LinkedIn profile URL"
+            required
+          />
+          <button id="submit" type="submit">Fetch profile</button>
+        </div>
 
-        <label for="apiKey">API key <span class="muted">(optional)</span></label>
-        <input id="apiKey" name="apiKey" type="password" placeholder="X-API-Key" />
-
-        <details class="advanced">
+        <details class="options">
           <summary>Use your own LinkedIn session <span class="muted">(optional)</span></summary>
-          <p class="hint">
-            Sensitive session cookies. Sent once over HTTPS for this request only, never
-            stored in the browser, and cleared after the request completes.
-          </p>
-          <label for="liAt">li_at</label>
-          <input id="liAt" name="liAt" type="password" autocomplete="off" placeholder="li_at cookie" />
-          <label for="jsession">JSESSIONID</label>
-          <input id="jsession" name="jsession" type="password" autocomplete="off" placeholder="JSESSIONID cookie" />
+          <div class="options-body">
+            <div class="field-grid">
+              <div class="field">
+                <label for="liAt">li_at</label>
+                <input id="liAt" name="liAt" type="password" autocomplete="off" placeholder="li_at cookie" />
+              </div>
+              <div class="field">
+                <label for="jsession">JSESSIONID</label>
+                <input id="jsession" name="jsession" type="password" autocomplete="off" placeholder="JSESSIONID cookie" />
+              </div>
+              <div class="field wide">
+                <label for="jsUserAgent">User-Agent <span class="muted">(optional, match your browser)</span></label>
+                <input id="jsUserAgent" name="jsUserAgent" type="text" autocomplete="off" placeholder="browser User-Agent for your session" />
+              </div>
+            </div>
+            <p class="hint">
+              By default the server's LinkedIn session is used. Your cookies are sent once
+              over HTTPS for this request only, never stored in the browser, and cleared as
+              soon as the request completes.
+            </p>
+          </div>
         </details>
-
-        <button id="submit" type="submit">Fetch profile</button>
       </form>
 
       <p id="status" role="status"></p>
       <section id="output" class="output" aria-live="polite"></section>
+
+      <footer class="footer"><span>Made by Ryan</span></footer>
     </main>
 
   </body>
