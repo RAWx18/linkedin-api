@@ -1,0 +1,40 @@
+<!-- SPDX-FileCopyrightText: 2026 Ryan Madhuwala -->
+<!-- SPDX-License-Identifier: MIT -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>linkedin-api</title>
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>linkedin-api</h1>
+        <p class="subtitle">Fetch a normalized LinkedIn profile as JSON.</p>
+      </header>
+
+      <form id="form" autocomplete="off">
+        <label for="url">Profile URL</label>
+        <input
+          id="url"
+          name="url"
+          type="text"
+          inputmode="url"
+          placeholder="https://www.linkedin.com/in/username"
+          required
+        />
+
+        <label for="apiKey">API key <span class="muted">(optional)</span></label>
+        <input id="apiKey" name="apiKey" type="password" placeholder="X-API-Key" />
+
+        <button id="submit" type="submit">Fetch profile</button>
+      </form>
+
+      <p id="status" role="status"></p>
+      <section id="output" class="output" aria-live="polite"></section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
