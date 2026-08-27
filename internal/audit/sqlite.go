@@ -40,6 +40,14 @@ CREATE INDEX IF NOT EXISTS idx_audit_client ON audit_events(client_ip, ts);
 CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_events(key_id, ts);
 `
 
+// addedColumns lists columns introduced after the table first shipped.
+// CREATE TABLE IF NOT EXISTS never alters an existing table, so a database
+// created before these columns existed gains them on open.
+var addedColumns = map[string]string{
+	"credential_mode": "ALTER TABLE audit_events ADD COLUMN credential_mode TEXT NOT NULL DEFAULT ''",
+	"cred_fp":         "ALTER TABLE audit_events ADD COLUMN cred_fp TEXT NOT NULL DEFAULT ''",
+}
+
 const insertSQL = `
 INSERT INTO audit_events
 	(ts, request_id, client_ip, key_id, profile_id, credential_mode, cred_fp, status, rate_decision,
@@ -76,22 +84,63 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
-// Open opens or creates the audit database at path and applies the schema. It
-// uses a rollback journal and a busy timeout, which is safe on both local disks
-// and network-mounted volumes for the service's single-writer access pattern.
+// Open opens or creates the audit database at path and applies the schema.
+//
+// SQLite cannot take the POSIX byte-range locks it normally relies on when the
+// file lives on an SMB/CIFS network mount such as Azure Files, which fails every
+// write with SQLITE_BUSY. `nolock=1` disables that locking; it is safe here
+// because each replica owns its own database file (the path carries the replica
+// name) and a single goroutine performs every write. A single open connection
+// serializes that writer with the occasional admin reader, and an in-memory
+// rollback journal avoids creating lock/journal sidecar files on the share.
 func Open(path string) (*SQLiteStore, error) {
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
+	dsn := "file:" + path + "?nolock=1&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=journal_mode(MEMORY)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open audit db: %w", err)
 	}
-	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(4)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("apply audit schema: %w", err)
 	}
+	if err := reconcileColumns(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate audit schema: %w", err)
+	}
 	return &SQLiteStore{db: db}, nil
+}
+
+// reconcileColumns adds any columns missing from an audit table created by an
+// earlier version of the schema.
+func reconcileColumns(db *sql.DB) error {
+	rows, err := db.Query("SELECT name FROM pragma_table_info('audit_events')")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+
+	present := make(map[string]bool, len(addedColumns))
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		present[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for name, alter := range addedColumns {
+		if present[name] {
+			continue
+		}
+		if _, err := db.Exec(alter); err != nil {
+			return fmt.Errorf("add column %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // Insert writes a batch of records in a single transaction.

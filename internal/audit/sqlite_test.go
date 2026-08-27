@@ -5,6 +5,7 @@ package audit
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -119,6 +120,71 @@ func TestStorePurgeRetention(t *testing.T) {
 	}
 	if sum.Total != 1 {
 		t.Errorf("remaining total = %d, want 1", sum.Total)
+	}
+}
+
+func TestOpenMigratesPreCredentialSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	oldSchema := `
+CREATE TABLE audit_events (
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts               INTEGER NOT NULL,
+	request_id       TEXT    NOT NULL,
+	client_ip        TEXT    NOT NULL,
+	key_id           TEXT    NOT NULL,
+	profile_id       TEXT    NOT NULL,
+	status           INTEGER NOT NULL,
+	rate_decision    TEXT    NOT NULL,
+	cached           INTEGER NOT NULL,
+	upstream_called  INTEGER NOT NULL,
+	upstream_outcome TEXT    NOT NULL,
+	retries          INTEGER NOT NULL,
+	latency_ms       INTEGER NOT NULL,
+	error_class      TEXT    NOT NULL
+);
+INSERT INTO audit_events
+	(ts, request_id, client_ip, key_id, profile_id, status, rate_decision,
+	 cached, upstream_called, upstream_outcome, retries, latency_ms, error_class)
+VALUES (1, 'r1', '1.1.1.1', 'k', 'alice', 200, 'allowed', 0, 1, 'ok', 0, 5, '');`
+	if _, err := db.Exec(oldSchema); err != nil {
+		t.Fatalf("create old schema: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	store, err := Open(path)
+	if err != nil {
+		t.Fatalf("open store over old schema: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	now := time.Now()
+	mustInsert(t, store, []Record{{
+		Time: now, ProfileID: "bob", ClientIP: "2.2.2.2", KeyID: "k",
+		CredentialMode: "caller_session", CredFP: "cs_abc123",
+		Status: 200, RateDecision: DecisionAllowed, Latency: 5 * time.Millisecond,
+	}})
+
+	var mode, fp string
+	row := store.db.QueryRow("SELECT credential_mode, cred_fp FROM audit_events WHERE profile_id = 'bob'")
+	if err := row.Scan(&mode, &fp); err != nil {
+		t.Fatalf("read migrated row: %v", err)
+	}
+	if mode != "caller_session" || fp != "cs_abc123" {
+		t.Errorf("credential_mode = %q, cred_fp = %q", mode, fp)
+	}
+
+	sum, err := store.Summary(context.Background(), now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("summary after migration: %v", err)
+	}
+	if sum.Total != 1 {
+		t.Errorf("windowed total = %d, want 1", sum.Total)
 	}
 }
 
