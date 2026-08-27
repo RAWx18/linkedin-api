@@ -18,11 +18,13 @@ template is in [.env.example](../.env.example).
 | `LINKEDIN_LI_AT` | | production | `li_at` session cookie (secret) |
 | `LINKEDIN_JSESSIONID` | | production | `JSESSIONID` value (secret) |
 | `LINKEDIN_BASE_URL` | `https://www.linkedin.com` | no | Upstream base, must be a linkedin.com host |
-| `LINKEDIN_USER_AGENT` | browser UA | no | User-Agent sent upstream |
+| `LINKEDIN_USER_AGENT` | | when a session is set | Exact browser User-Agent of the session that created the cookies; required when `LINKEDIN_LI_AT` is set |
+| `LINKEDIN_ACCEPT_LANGUAGE` | `en-US,en;q=0.9` | no | Accept-Language sent upstream to match the browser |
 | `HTTP_REQUEST_TIMEOUT` | `10s` | no | Overall deadline per upstream call |
 | `HTTP_MAX_RETRIES` | `2` | no | Retries for transient upstream failures |
 | `HTTP_RETRY_BACKOFF` | `300ms` | no | Base backoff, grows with jitter |
 | `PROFILE_TIMEOUT` | `15s` | no | Deadline for a whole profile lookup across its upstream calls |
+| `LINKEDIN_ALLOW_CALLER_SESSION` | `true` | no | Allow callers to supply their own session via the `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID` headers |
 | `CACHE_ENABLED` | `true` | no | Enable the in-memory cache |
 | `CACHE_TTL` | `10m` | no | Cache entry lifetime |
 | `CACHE_MAX_ENTRIES` | `1000` | no | Cache size cap |
@@ -38,6 +40,7 @@ template is in [.env.example](../.env.example).
 | `UPSTREAM_BREAKER_COOLDOWN` | `30s` | no | How long the circuit stays open before a probe |
 | `UPSTREAM_SESSION_THRESHOLD` | `2` | no | Auth or challenge responses before the session is treated as unhealthy |
 | `UPSTREAM_SESSION_COOLDOWN` | `5m` | no | Base cooldown for an unhealthy session, doubling on repeated failed probes |
+| `CALLER_SESSION_UNHEALTHY_TTL` | `5m` | no | How long a rejected caller session is fast-failed before it may be tried again |
 | `UPSTREAM_NEG_CACHE_TTL` | `1m` | no | How long a confirmed-missing profile is remembered |
 | `API_KEYS` | | production | Comma-separated keys; empty disables auth in dev |
 | `LOG_LEVEL` | `info` | no | `debug`, `info`, `warn`, or `error` |
@@ -66,3 +69,11 @@ Treat both as passwords. Keep them in `.env` locally or in your deployment's
 secret store, and never commit them. They expire, so refresh them when upstream
 authentication starts returning `upstream_auth_failed`. How they are used is in
 [reverse-engineering.md](reverse-engineering.md#authentication).
+
+## Caller-supplied sessions
+
+When `LINKEDIN_ALLOW_CALLER_SESSION` is true, a caller may send its own `li_at`
+and `JSESSIONID` through request headers to use its own authorized session for a
+single request. The values are request-scoped, never stored, and never replace
+the server session. See [api.md](api.md) for usage and [security.md](security.md)
+for the isolation guarantees. Set it to `false` to reject caller sessions.

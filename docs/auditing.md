@@ -18,6 +18,8 @@ rate limiting or authentication. Each row holds:
 | `client_ip` | Remote address, from the connection not a spoofable header |
 | `key_id` | Non-reversible fingerprint of the API key, or `anonymous` |
 | `profile_id` | Normalized LinkedIn public identifier, empty if never parsed |
+| `credential_mode` | `server_session` or `caller_session`, empty if not evaluated |
+| `cred_fp` | Non-reversible fingerprint of a caller session (`cs_...`), empty for the server session |
 | `status` | Final HTTP status |
 | `rate_decision` | `allowed`, `ip_limited`, or `key_limited` |
 | `cached` | Whether the response was served from cache |
@@ -35,6 +37,10 @@ to investigate abuse:
 - No API keys, `li_at`, `JSESSIONID`, authorization headers, or cookies are ever
   written. The API key is reduced to a one-way SHA-256 fingerprint (`key_id`) so
   traffic can be grouped by caller without the key being recoverable.
+- Caller-supplied `li_at` and `JSESSIONID` are never written either. When a caller
+  uses its own session, only the `credential_mode` and a non-reversible keyed
+  fingerprint (`cred_fp`, `cs_...`) are stored, so caller activity can be grouped
+  without the cookies being recoverable.
 - The full request URL is not stored. Only the normalized public identifier is
   kept, which is the part already present in a LinkedIn profile URL and the only
   part needed to answer "which profiles are requested most". Query strings and

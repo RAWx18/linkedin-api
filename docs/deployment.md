@@ -73,3 +73,36 @@ Verify the deployment:
 ```bash
 curl https://<app-fqdn>/healthz
 ```
+
+## Recovering an expired or challenged session
+
+When LinkedIn challenges or invalidates the server session, the service protects
+itself automatically and surfaces the state for an operator:
+
+1. Detection. Authentication failures and login redirects trip the session
+   circuit. `upstream_session_healthy` drops to `0`, `upstream_circuit_open` goes
+   to `1`, a structured `warn` log records that the session is unhealthy along
+   with the cooldown, and profile requests return controlled `502` and `503`
+   responses. No credential value is ever logged.
+2. Containment. While unhealthy the breaker stops issuing server-session traffic
+   and admits only one probe per cooldown, which doubles on repeated failures, so
+   a dead session is not hammered.
+3. Replace the credentials. Obtain a fresh `li_at` and `JSESSIONID` from a
+   signed-in browser (see [configuration.md](configuration.md#session-cookies)),
+   update the Container App secrets, and roll a new revision so they are picked up:
+
+   ```bash
+   az containerapp secret set -g linkedin-api-rg -n linkedinapi-app \
+     --secrets linkedin-li-at="$LINKEDIN_LI_AT" linkedin-jsessionid="$LINKEDIN_JSESSIONID"
+   az containerapp update -g linkedin-api-rg -n linkedinapi-app
+   ```
+
+4. Recovery. After the restart the first successful probe closes the circuit,
+   `upstream_session_healthy` returns to `1`, and an `info` log records the
+   recovery. No manual reset is needed.
+
+Callers that supply their own session (`LINKEDIN_ALLOW_CALLER_SESSION`, on by
+default) are unaffected by a server-session outage: their requests keep working as
+long as their own session is valid. A caller whose session expires gets a
+`401 caller_session_invalid` and must supply fresh credentials, which never
+requires an operator action or a restart.

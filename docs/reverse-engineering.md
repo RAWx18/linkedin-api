@@ -22,11 +22,60 @@ login provide it:
 - `LINKEDIN_JSESSIONID`, the `JSESSIONID` value, which looks like `ajax:1234...`.
 
 Each request sends both as cookies and the unquoted `JSESSIONID` as the
-`csrf-token` header, matching what the web client does. The client also sets a
-browser `User-Agent`, `x-restli-protocol-version: 2.0.0`, and `x-li-lang`. The
-session object is built once and never mutated, so concurrent requests cannot
-corrupt shared auth state. Setting these values is covered in
+`csrf-token` header, matching what the web client does. The session object is
+built once and never mutated, so concurrent requests cannot corrupt shared auth
+state. Setting these values is covered in
 [configuration.md](configuration.md#session-cookies).
+
+## Session compatibility
+
+A LinkedIn session is bound to the browser that created it. The strongest signal
+LinkedIn uses to decide whether a request belongs to that session is the
+`User-Agent`. If the server presents a different `User-Agent` than the browser
+where the `li_at` and `JSESSIONID` cookies were obtained, LinkedIn can accept the
+first request and then challenge and invalidate the session, so the next request
+fails with `upstream_auth_failed`. This is the "works once, then fails" symptom.
+
+The fix is not evasion but correctness: present the same browser context. The
+service requires `LINKEDIN_USER_AGENT` to be set to the exact browser `User-Agent`
+whenever a session is configured, and refuses to start otherwise. The request
+header set is fixed and deterministic, so identical inputs always produce the same
+request:
+
+| Header | Value |
+| --- | --- |
+| `User-Agent` | `LINKEDIN_USER_AGENT`, or a caller's `X-LinkedIn-User-Agent` |
+| `Accept` | `application/json` |
+| `Accept-Language` | `LINKEDIN_ACCEPT_LANGUAGE` (default `en-US,en;q=0.9`) |
+| `X-RestLi-Protocol-Version` | `2.0.0` |
+| `X-Li-Lang` | `en_US` |
+| `Cookie` | `li_at=...; JSESSIONID="ajax:..."` |
+| `Csrf-Token` | the unquoted `JSESSIONID` |
+
+`Accept` deliberately requests the non-normalized collection shape the parser
+reads; it is not changed to the web client's normalized media type.
+
+### Manual validation procedure
+
+To confirm the Go request matches your browser without ever exposing secrets:
+
+1. In the browser signed in to LinkedIn, open a profile, then devtools, Network.
+   Filter for `voyager/api/identity/dash/profiles` and open the request.
+2. Copy the exact `user-agent` request header and set `LINKEDIN_USER_AGENT` to it.
+3. Start the service with `LOG_LEVEL=debug`. Each upstream call logs a
+   `linkedin upstream request` line with non-sensitive request metadata
+   (`user_agent`, `accept`, `accept_language`, cookie names, and whether a CSRF
+   token is present). Cookie values, `li_at`, `JSESSIONID`, and the CSRF token are
+   never logged.
+4. Compare the logged `user_agent` and header names with the browser request. Two
+   lookups produce identical request lines, confirming the deterministic model.
+
+### Caller sessions
+
+A caller supplying its own session can also supply the matching browser
+`User-Agent` through the optional `X-LinkedIn-User-Agent` header, so its session
+stays consistent. It applies only to that request and never changes the server
+`User-Agent`.
 
 ## Response shape and normalization
 
@@ -64,6 +113,14 @@ trouble. While the session is unhealthy, callers receive a controlled `503`.
 `upstream_session_healthy` exposes the state, and it clears automatically once a
 probe succeeds after the cookies are refreshed. The service never tries to bypass a
 challenge or login wall.
+
+Matching the browser `User-Agent` and session context (above) removes the most
+common cause of this invalidation. It cannot guarantee a session is never
+challenged: a server also differs from a browser in its network origin, and
+LinkedIn may still challenge a session used from a datacenter address. The service
+does not attempt to work around that. When it happens the session-health breaker
+detects it, stops further traffic, and surfaces the state, so the failure stays
+contained and is recoverable by refreshing the cookies.
 
 ## Volatility
 

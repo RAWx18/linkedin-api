@@ -61,6 +61,39 @@ tolerance. When credentials expire or the source is blocked, the breaker turns t
 failure into fast, controlled 502 and 503 responses, and the service recovers on
 its own once access returns.
 
+## Optional caller-supplied sessions
+
+A caller may supply its own LinkedIn session for a single request through the
+`X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID` headers. The feature is optional,
+controlled by `LINKEDIN_ALLOW_CALLER_SESSION`, and is a convenience for a caller
+with its own authorized session, never a way to bypass LinkedIn.
+
+The credentials are treated as request-scoped secrets and are strictly isolated:
+
+- They are used only for that one request and never fall back to, mix with, or
+  substitute the server session. A caller-session failure never tries the server
+  session.
+- The raw values live only in request memory. They are never written to the
+  cache, audit store, logs, metrics, traces, or any persistent store, and are
+  never used as a cache key, metric label, log field, or request id.
+- Caller-session requests bypass the shared cache and request coalescing, so a
+  profile fetched with one caller's session can never be served to another caller.
+- For operational tracking a non-reversible keyed fingerprint (`cs_...`) is
+  derived from the credentials. It cannot be reversed to the cookies and is the
+  only caller-session identifier that ever appears in metadata.
+- When LinkedIn rejects a caller session (401, 403, or a login redirect), only
+  that session is marked unhealthy for a short, bounded window. It is fast-failed
+  with `caller_session_invalid` during that window, with no retries and no
+  upstream traffic. A caller's bad session never opens the shared server-session
+  circuit, and a dead server session never invalidates caller sessions. A rate
+  limit or broad restriction still engages the global upstream protection for all
+  traffic.
+
+All existing protections (API-key auth, per-IP and per-key limits, the aggregate
+upstream rate and concurrency caps, URL validation, timeouts, and response-size
+limits) apply identically regardless of which session a request uses, so caller
+credentials cannot be used to bypass any limit.
+
 ## Request auditing
 
 Every API request is recorded to a durable store for abuse investigation and

@@ -31,6 +31,8 @@ private registry that also includes Go runtime and process collectors.
 | `upstream_circuit_open` | gauge | |
 | `upstream_circuit_trips_total` | counter | |
 | `upstream_session_healthy` | gauge | |
+| `caller_session_invalid_total` | counter | |
+| `caller_sessions_unhealthy` | gauge | |
 | `upstream_requests_coalesced_total` | counter | |
 | `audit_events_written_total` | counter | |
 | `audit_events_dropped_total` | counter | |
@@ -41,18 +43,27 @@ alert on: a rising rejection rate or a circuit that stays open signals abuse or
 that LinkedIn is restricting the session. `upstream_session_healthy` dropping to 0
 is the strongest signal that the LinkedIn session has been challenged or
 invalidated and needs new cookies; while it is 0 the service stops issuing
-upstream requests and returns controlled `503`s. A non-zero
-`audit_events_dropped_total` means request volume is outrunning the audit buffer,
-and `audit_write_errors_total` means the store is unhealthy; neither affects
-profile lookups.
+upstream requests and returns controlled `503`s. `upstream_session_healthy`
+tracks the server-configured session only. Caller-supplied sessions are tracked
+separately: `caller_session_invalid_total` counts caller sessions LinkedIn
+rejected or that were fast-failed as already expired, and `caller_sessions_unhealthy`
+is how many caller sessions are currently being fast-failed. A caller's bad
+session never moves `upstream_session_healthy` or opens the shared circuit. A
+non-zero `audit_events_dropped_total` means request volume is outrunning the audit
+buffer, and `audit_write_errors_total` means the store is unhealthy; neither
+affects profile lookups.
 
 ## Request history
 
 Operational metrics answer "how is the system behaving right now" and live in
 Prometheus. Durable, queryable request history answers "what exactly happened"
 and lives in a separate SQLite audit store, not in the metrics system. It powers
-the protected `/admin/usage` endpoint and incident investigation. The schema,
-privacy rules, retention, and example queries are in [auditing.md](auditing.md).
+the protected `/admin/usage` endpoint and incident investigation. Each row also
+records the request's `credential_mode` (`server_session` or `caller_session`)
+and, for caller sessions, a non-reversible `cred_fp` fingerprint, so an operator
+can tell server-session from caller-session activity without ever seeing a
+credential. The schema, privacy rules, retention, and example queries are in
+[auditing.md](auditing.md).
 
 ## Azure
 

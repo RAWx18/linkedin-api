@@ -27,6 +27,38 @@ curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhg
   -H "X-API-Key: your-key"
 ```
 
+### Optional caller-supplied session
+
+By default the request uses the server-configured LinkedIn session. A caller may
+instead supply its own session for a single request through two headers:
+
+- `X-LinkedIn-Li-At`: the `li_at` cookie value
+- `X-LinkedIn-JSESSIONID`: the `JSESSIONID` cookie value
+- `X-LinkedIn-User-Agent` (optional): the browser User-Agent of that session, so the request matches the browser that created the cookies
+
+Both cookie headers are required together; supplying only one is a `400`. When both are present
+the request uses only the caller session and never falls back to the server
+session. Caller sessions are not served from or written to the shared cache, are
+never stored or logged, and are used for that one request only. The feature can be
+turned off with `LINKEDIN_ALLOW_CALLER_SESSION=false`.
+
+Load the cookies from environment variables rather than typing them into shell
+history:
+
+```bash
+export LI_AT="your_li_at_cookie"
+export JSESSIONID="ajax:your_jsessionid"
+curl "http://localhost:8080/v1/profile?url=https://www.linkedin.com/in/williamhgates" \
+  -H "X-API-Key: your-key" \
+  -H "X-LinkedIn-Li-At: $LI_AT" \
+  -H "X-LinkedIn-JSESSIONID: $JSESSIONID" \
+  -H "X-LinkedIn-User-Agent: $LINKEDIN_UA"
+```
+
+If the supplied session is rejected or expired, the response is `401` with code
+`caller_session_invalid`. That session is then fast-failed for a short window with
+no retries and no fallback; supply a fresh session to try again.
+
 Response:
 
 ```json
@@ -61,8 +93,8 @@ Response:
 | Status | Code | Meaning |
 | --- | --- | --- |
 | 200 | | Profile returned |
-| 400 | `invalid_request` | Missing or invalid URL |
-| 401 | `unauthorized` | Missing or invalid API key |
+| 400 | `invalid_request` | Missing or invalid URL, or an incomplete caller session |
+| 401 | `unauthorized`, `caller_session_invalid` | Missing or invalid API key, or a supplied caller session was rejected or expired |
 | 404 | `profile_not_found` | Profile not found upstream |
 | 429 | `rate_limited`, `upstream_rate_limited` | Local or upstream rate limit, see `Retry-After` |
 | 502 | `upstream_auth_failed`, `upstream_parse_error` | Session rejected or response unreadable |

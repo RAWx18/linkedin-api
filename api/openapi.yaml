@@ -19,6 +19,14 @@ paths:
     get:
       summary: Fetch a normalized LinkedIn profile
       operationId: getProfile
+      description: >
+        Returns a normalized profile. By default the request uses the
+        server-configured LinkedIn session. A caller may optionally supply its own
+        LinkedIn session through the X-LinkedIn-Li-At and X-LinkedIn-JSESSIONID
+        headers; when both are present the request uses only that caller session,
+        never the server session, and is not served from or written to the shared
+        cache. Caller credentials are used for the single request only and are
+        never stored, logged, traced, or cached.
       parameters:
         - name: url
           in: query
@@ -27,6 +35,31 @@ paths:
           schema:
             type: string
           example: https://www.linkedin.com/in/williamhgates
+        - name: X-LinkedIn-Li-At
+          in: header
+          required: false
+          description: >
+            Optional caller-supplied LinkedIn li_at cookie. Must be sent together with
+            X-LinkedIn-JSESSIONID; supplying only one is a 400. Prefer loading it from
+            an environment variable rather than typing it into shell history.
+          schema:
+            type: string
+        - name: X-LinkedIn-JSESSIONID
+          in: header
+          required: false
+          description: >
+            Optional caller-supplied LinkedIn JSESSIONID cookie. Must be sent together
+            with X-LinkedIn-Li-At.
+          schema:
+            type: string
+        - name: X-LinkedIn-User-Agent
+          in: header
+          required: false
+          description: >
+            Optional browser User-Agent for a caller-supplied session, so the request
+            matches the browser that created the cookies. Ignored without caller cookies.
+          schema:
+            type: string
       security:
         - apiKey: []
       responses:
@@ -43,7 +76,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401":
-          description: A valid API key was required and not provided.
+          description: >
+            A valid API key was required and not provided, or a caller-supplied
+            LinkedIn session was rejected by LinkedIn or is already known to be
+            expired (caller_session_invalid).
           content:
             application/json:
               schema:
@@ -198,6 +234,7 @@ components:
               enum:
                 - invalid_request
                 - unauthorized
+                - caller_session_invalid
                 - profile_not_found
                 - rate_limited
                 - upstream_auth_failed

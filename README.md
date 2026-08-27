@@ -53,11 +53,14 @@ GET /v1/profile?url=<linkedin profile url>
 ```
 
 It returns `{ "data": <profile>, "meta": <metadata> }`. When `API_KEYS` is set,
-pass a key with the `X-API-Key` header. Health is at `/healthz` and `/readyz`, and
-metrics at `/metrics`. Every request is recorded to a privacy-safe audit store; a
-protected `GET /admin/usage` exposes usage aggregates when `AUDIT_ADMIN_KEYS` is
-set. Request and response details, the schema, and error codes are in
-[docs/api.md](docs/api.md).
+pass a key with the `X-API-Key` header. By default the lookup uses the server's
+LinkedIn session; a caller may optionally supply its own session for a single
+request through the `X-LinkedIn-Li-At` and `X-LinkedIn-JSESSIONID` headers, which
+are request-scoped, isolated per caller, and never stored. Health is at `/healthz`
+and `/readyz`, and metrics at `/metrics`. Every request is recorded to a
+privacy-safe audit store; a protected `GET /admin/usage` exposes usage aggregates
+when `AUDIT_ADMIN_KEYS` is set. Request and response details, the schema, and
+error codes are in [docs/api.md](docs/api.md).
 
 ## Build and test
 

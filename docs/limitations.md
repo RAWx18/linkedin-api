@@ -9,6 +9,11 @@
   `Retry-After` and is not retried.
 - Session cookies expire. Refresh `LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID` when
   requests start failing with `upstream_auth_failed`.
+- A session is bound to the browser that created it. `LINKEDIN_USER_AGENT` must be
+  the exact browser User-Agent of that session, or LinkedIn can invalidate it after
+  the first request. Matching it removes the common cause, but a session used from a
+  datacenter address may still be challenged; the service detects and contains this
+  rather than evading it. See [reverse-engineering.md](reverse-engineering.md#session-compatibility).
 - Only profile retrieval is implemented. There are no company, job, or search
   endpoints.
 - Rate limiting keys on the connection's remote address. Behind a proxy that
