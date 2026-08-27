@@ -12,16 +12,17 @@ import (
 type Code string
 
 const (
-	CodeInvalidRequest      Code = "invalid_request"
-	CodeUnauthorized        Code = "unauthorized"
-	CodeProfileNotFound     Code = "profile_not_found"
-	CodeRateLimited         Code = "rate_limited"
-	CodeUpstreamAuthFailed  Code = "upstream_auth_failed"
-	CodeUpstreamRateLimited Code = "upstream_rate_limited"
-	CodeUpstreamTimeout     Code = "upstream_timeout"
-	CodeUpstreamUnavailable Code = "upstream_unavailable"
-	CodeUpstreamParseError  Code = "upstream_parse_error"
-	CodeInternal            Code = "internal_error"
+	CodeInvalidRequest       Code = "invalid_request"
+	CodeUnauthorized         Code = "unauthorized"
+	CodeCallerSessionInvalid Code = "caller_session_invalid"
+	CodeProfileNotFound      Code = "profile_not_found"
+	CodeRateLimited          Code = "rate_limited"
+	CodeUpstreamAuthFailed   Code = "upstream_auth_failed"
+	CodeUpstreamRateLimited  Code = "upstream_rate_limited"
+	CodeUpstreamTimeout      Code = "upstream_timeout"
+	CodeUpstreamUnavailable  Code = "upstream_unavailable"
+	CodeUpstreamParseError   Code = "upstream_parse_error"
+	CodeInternal             Code = "internal_error"
 )
 
 // Error carries a client-safe message alongside an internal cause. Message may
@@ -51,6 +52,11 @@ func Invalid(msg string) *Error { return newError(CodeInvalidRequest, msg, nil) 
 
 // Unauthorized reports a missing or invalid API key on the public API.
 func Unauthorized(msg string) *Error { return newError(CodeUnauthorized, msg, nil) }
+
+// CallerSessionInvalid reports that a caller-supplied LinkedIn session was
+// rejected by LinkedIn or is already known to be expired. It never carries the
+// credential values in its cause.
+func CallerSessionInvalid(msg string) *Error { return newError(CodeCallerSessionInvalid, msg, nil) }
 
 // NotFound reports that the requested profile could not be located.
 func NotFound(msg string) *Error { return newError(CodeProfileNotFound, msg, nil) }
