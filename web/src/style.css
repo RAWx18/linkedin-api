@@ -64,21 +64,9 @@ body {
 
 .masthead h1 {
   margin: 0;
-  font-family: var(--mono);
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.masthead h1::before {
-  content: "";
-  display: inline-block;
-  width: 0.55em;
-  height: 0.55em;
-  margin-right: 0.55em;
-  border-radius: 50%;
-  background: var(--accent);
-  vertical-align: baseline;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .tagline {
