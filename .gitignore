@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Ryan Madhuwala
+# SPDX-License-Identifier: MIT
+
+# Build output
+/bin/
+/dist/
+*.test
+*.out
+coverage.out
+
+# Local audit store
+audit.db
+audit.db-journal
+audit.db-wal
+audit.db-shm
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Node dependencies (UI build artifacts under web/dist are committed for embedding)
+web/node_modules/
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local notes
+ASSIGNMENT.md
