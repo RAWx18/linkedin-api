@@ -1,0 +1,20 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileTestScoreCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profileTestScore:(ACoAATEST,70)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 1, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profileTestScore:(ACoAATEST,70)",
+      "name": "GRE",
+      "score": "334/340",
+      "description": "Graduate Record Examination.",
+      "dateOn": { "month": 9, "year": 2019, "$type": "com.linkedin.common.Date" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.TestScore"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/garudexlabs/linkedin-api/internal/domain"
 	"github.com/garudexlabs/linkedin-api/internal/urlx"
@@ -79,6 +80,12 @@ func TestProfileFull(t *testing.T) {
 	if len(p.ProfilePicture.Variants) != 4 {
 		t.Errorf("expected 4 profile picture variants, got %d", len(p.ProfilePicture.Variants))
 	}
+	if p.CreatedAt == nil || !p.CreatedAt.Equal(time.UnixMilli(1367521780840).UTC()) {
+		t.Errorf("created_at = %v", p.CreatedAt)
+	}
+	if len(p.SupportedLocales) != 1 || p.SupportedLocales[0] != "en_US" {
+		t.Errorf("supported_locales = %v", p.SupportedLocales)
+	}
 }
 
 func TestProfileImageVariants(t *testing.T) {
@@ -119,6 +126,51 @@ func TestProfileTopicsDedupAndMalformed(t *testing.T) {
 	}
 	if len(p.Topics) != 2 || p.Topics[0] != "ai" || p.Topics[1] != "cloud" {
 		t.Errorf("topics = %v, want [ai cloud]", p.Topics)
+	}
+}
+
+func TestProfileSupportedLocalesAndCreated(t *testing.T) {
+	raw := []byte(`{"elements":[{"firstName":"A","created":1367521780840,` +
+		`"supportedLocales":[{"language":"en","country":"US"},{"language":"en","country":"US"},` +
+		`{"language":"fr"},{"language":""}]}]}`)
+	p, err := Profile(raw, testRef())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(p.SupportedLocales) != 2 || p.SupportedLocales[0] != "en_US" || p.SupportedLocales[1] != "fr" {
+		t.Errorf("supported_locales = %v, want [en_US fr]", p.SupportedLocales)
+	}
+	if p.CreatedAt == nil || !p.CreatedAt.Equal(time.UnixMilli(1367521780840).UTC()) {
+		t.Errorf("created_at = %v", p.CreatedAt)
+	}
+
+	p2, err := Profile([]byte(`{"elements":[{"firstName":"B"}]}`), testRef())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p2.CreatedAt != nil || p2.SupportedLocales != nil {
+		t.Errorf("absent fields should be nil: created=%v locales=%v", p2.CreatedAt, p2.SupportedLocales)
+	}
+}
+
+func TestProfileDecodesHTMLEntities(t *testing.T) {
+	raw := []byte(`{"elements":[{"firstName":"A &amp; B","lastName":"O&#39;Neil",` +
+		`"headline":"AI &amp; ML","summary":"RAG &amp; &quot;vectors&quot;"}]}`)
+	p, err := Profile(raw, testRef())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.FirstName != "A & B" || p.LastName != "O'Neil" {
+		t.Errorf("names = %q / %q", p.FirstName, p.LastName)
+	}
+	if p.FullName != "A & B O'Neil" {
+		t.Errorf("full name = %q", p.FullName)
+	}
+	if p.Headline != "AI & ML" {
+		t.Errorf("headline = %q", p.Headline)
+	}
+	if p.Summary == nil || *p.Summary != `RAG & "vectors"` {
+		t.Errorf("summary = %v", p.Summary)
 	}
 }
 

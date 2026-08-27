@@ -1,0 +1,42 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profilePositionCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profilePosition:(ACoAATEST,1)",
+      "urn:li:fsd_profilePosition:(ACoAATEST,2)",
+      "urn:li:fsd_profilePosition:(ACoAATEST,3)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 3, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profilePosition:(ACoAATEST,2)",
+      "title": "Founder",
+      "companyName": "Breakthrough Energy ",
+      "companyUrn": "urn:li:fsd_company:19141006",
+      "locationName": null,
+      "description": null,
+      "dateRange": { "start": { "year": 2015, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Position"
+    },
+    {
+      "entityUrn": "urn:li:fsd_profilePosition:(ACoAATEST,3)",
+      "title": "Co-founder",
+      "companyName": "Microsoft",
+      "companyUrn": "urn:li:fsd_company:1035",
+      "locationName": "Redmond, Washington",
+      "description": "Building software \u0026amp; tools.",
+      "dateRange": { "start": { "month": 4, "year": 1975, "$type": "com.linkedin.common.Date" }, "end": { "month": 6, "year": 2008, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Position"
+    },
+    {
+      "entityUrn": "urn:li:fsd_profilePosition:(ACoAATEST,1)",
+      "title": "Co-chair",
+      "companyName": "Gates Foundation",
+      "companyUrn": "urn:li:fsd_company:8736",
+      "dateRange": { "start": { "year": 2000, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Position"
+    }
+  ]
+}

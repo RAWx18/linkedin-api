@@ -1,0 +1,39 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileEducationCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profileEducation:(ACoAATEST,10)",
+      "urn:li:fsd_profileEducation:(ACoAATEST,11)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 2, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profileEducation:(ACoAATEST,11)",
+      "schoolName": "Example State University",
+      "schoolUrn": null,
+      "companyUrn": "urn:li:fsd_company:1646",
+      "degreeName": "B.S.",
+      "fieldOfStudy": "Computer Science",
+      "grade": "3.9 GPA",
+      "activities": "Robotics Club\nHackathon Team",
+      "description": "Focus on distributed systems.",
+      "dateRange": { "start": { "year": 2016, "$type": "com.linkedin.common.Date" }, "end": { "year": 2020, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Education"
+    },
+    {
+      "entityUrn": "urn:li:fsd_profileEducation:(ACoAATEST,10)",
+      "schoolName": "Harvard University",
+      "schoolUrn": "urn:li:fsd_school:18483",
+      "companyUrn": null,
+      "degreeName": null,
+      "fieldOfStudy": null,
+      "grade": null,
+      "activities": null,
+      "description": null,
+      "dateRange": { "start": { "year": 1973, "$type": "com.linkedin.common.Date" }, "end": { "year": 1975, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Education"
+    }
+  ]
+}

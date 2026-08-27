@@ -1,0 +1,17 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileSkillCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_skill:(ACoAATEST,20)",
+      "urn:li:fsd_skill:(ACoAATEST,21)",
+      "urn:li:fsd_skill:(ACoAATEST,22)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 3, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    { "entityUrn": "urn:li:fsd_skill:(ACoAATEST,21)", "name": "Distributed Systems", "$type": "com.linkedin.voyager.dash.identity.profile.Skill" },
+    { "entityUrn": "urn:li:fsd_skill:(ACoAATEST,20)", "name": "Go (Programming Language)", "$type": "com.linkedin.voyager.dash.identity.profile.Skill" },
+    { "entityUrn": "urn:li:fsd_skill:(ACoAATEST,22)", "name": "Kubernetes", "$type": "com.linkedin.voyager.dash.identity.profile.Skill" }
+  ]
+}

@@ -5,7 +5,9 @@ package parse
 
 import (
 	"encoding/json"
+	"html"
 	"strings"
+	"time"
 
 	"github.com/garudexlabs/linkedin-api/internal/domain"
 	"github.com/garudexlabs/linkedin-api/internal/urlx"
@@ -28,11 +30,13 @@ type dashProfile struct {
 	Creator           bool          `json:"creator"`
 	Student           bool          `json:"student"`
 	Memorialized      bool          `json:"memorialized"`
+	Created           int64         `json:"created"`
 	ProfilePicture    *dashPhoto    `json:"profilePicture"`
 	BackgroundPicture *dashPhoto    `json:"backgroundPicture"`
 	Location          *dashLocation `json:"location"`
 	Websites          []dashWebsite `json:"websites"`
 	PrimaryLocale     *dashLocale   `json:"primaryLocale"`
+	SupportedLocales  []dashLocale  `json:"supportedLocales"`
 	CreatorInfo       *dashCreator  `json:"creatorInfo"`
 	TopVoiceBadge     *struct {
 		BadgeText string `json:"badgeText"`
@@ -91,15 +95,17 @@ func Profile(raw json.RawMessage, ref urlx.ProfileRef) (*domain.Profile, error) 
 		return nil, domain.NotFound("the requested LinkedIn profile was not found")
 	}
 	e := resp.Elements[0]
+	first, last := cleanText(e.FirstName), cleanText(e.LastName)
 	return &domain.Profile{
 		PublicIdentifier: ref.PublicID,
 		ProfileURL:       ref.CanonicalURL,
-		FirstName:        e.FirstName,
-		LastName:         e.LastName,
-		FullName:         strings.TrimSpace(e.FirstName + " " + e.LastName),
-		Headline:         e.Headline,
-		Summary:          strPtr(e.Summary),
+		FirstName:        first,
+		LastName:         last,
+		FullName:         strings.TrimSpace(first + " " + last),
+		Headline:         cleanText(e.Headline),
+		Summary:          strPtr(cleanText(e.Summary)),
 		ProfileLanguage:  e.language(),
+		SupportedLocales: e.supportedLocales(),
 		Premium:          e.Premium,
 		Influencer:       e.Influencer,
 		Creator:          e.Creator,
@@ -113,7 +119,28 @@ func Profile(raw json.RawMessage, ref urlx.ProfileRef) (*domain.Profile, error) 
 		Websites:         e.sites(),
 		CreatorWebsite:   e.creatorWebsite(),
 		Topics:           e.topics(),
+		CreatedAt:        e.created(),
 	}, nil
+}
+
+// cleanText decodes the HTML entities LinkedIn embeds in display strings, such as
+// &amp; for &, so the normalized profile carries readable text.
+func cleanText(s string) string {
+	return html.UnescapeString(s)
+}
+
+// ProfileURN extracts the member's profile URN from a DASH profiles response; it
+// keys the section enrichment lookups and is empty when absent.
+func ProfileURN(raw json.RawMessage) string {
+	var resp struct {
+		Elements []struct {
+			EntityURN string `json:"entityUrn"`
+		} `json:"elements"`
+	}
+	if json.Unmarshal(raw, &resp) != nil || len(resp.Elements) == 0 {
+		return ""
+	}
+	return resp.Elements[0].EntityURN
 }
 
 func (e dashProfile) verified() bool {
@@ -149,19 +176,60 @@ func (e dashProfile) sites() []domain.Website {
 	return out
 }
 
+// localeString renders a locale as language_COUNTRY, or just the language, and
+// is empty when no language is present.
+func localeString(l dashLocale) string {
+	lang := strings.TrimSpace(l.Language)
+	if lang == "" {
+		return ""
+	}
+	if country := strings.TrimSpace(l.Country); country != "" {
+		return lang + "_" + country
+	}
+	return lang
+}
+
 // language builds the primary locale as language_COUNTRY, or just the language.
 func (e dashProfile) language() string {
 	if e.PrimaryLocale == nil {
 		return ""
 	}
-	lang := strings.TrimSpace(e.PrimaryLocale.Language)
-	if lang == "" {
-		return ""
+	return localeString(*e.PrimaryLocale)
+}
+
+// supportedLocales lists the distinct locales the profile publishes content in,
+// preserving order and dropping duplicates and empty entries.
+func (e dashProfile) supportedLocales() []string {
+	if len(e.SupportedLocales) == 0 {
+		return nil
 	}
-	if country := strings.TrimSpace(e.PrimaryLocale.Country); country != "" {
-		return lang + "_" + country
+	seen := make(map[string]struct{}, len(e.SupportedLocales))
+	out := make([]string, 0, len(e.SupportedLocales))
+	for _, l := range e.SupportedLocales {
+		s := localeString(l)
+		if s == "" {
+			continue
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
 	}
-	return lang
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// created converts the profile creation timestamp in milliseconds to a UTC time,
+// and is nil when the source omits it.
+func (e dashProfile) created() *time.Time {
+	if e.Created <= 0 {
+		return nil
+	}
+	t := time.UnixMilli(e.Created).UTC()
+	return &t
 }
 
 // creatorWebsite returns the featured creator link when present.

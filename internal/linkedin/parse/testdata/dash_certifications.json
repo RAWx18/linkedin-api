@@ -1,0 +1,33 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileCertificationCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profileCertification:(ACoAATEST,30)",
+      "urn:li:fsd_profileCertification:(ACoAATEST,31)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 2, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profileCertification:(ACoAATEST,31)",
+      "name": "Certified Kubernetes Administrator",
+      "authority": "The Linux Foundation",
+      "companyUrn": "urn:li:fsd_company:208777",
+      "url": "https://example.com/credential/ckad-123",
+      "licenseNumber": "LF-CKA-123",
+      "dateRange": { "start": { "month": 3, "year": 2024, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Certification"
+    },
+    {
+      "entityUrn": "urn:li:fsd_profileCertification:(ACoAATEST,30)",
+      "name": "AWS Certified Solutions Architect",
+      "authority": "Amazon Web Services",
+      "companyUrn": null,
+      "url": null,
+      "licenseNumber": null,
+      "dateRange": { "start": { "month": 1, "year": 2023, "$type": "com.linkedin.common.Date" }, "end": { "month": 1, "year": 2026, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Certification"
+    }
+  ]
+}

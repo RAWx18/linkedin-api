@@ -1,0 +1,19 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileProjectCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profileProject:(ACoAATEST,60)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 1, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profileProject:(ACoAATEST,60)",
+      "title": "Open Source Profile Service",
+      "description": "A bounded, cache-first API that normalizes profile data.",
+      "dateRange": { "start": { "month": 7, "year": 2025, "$type": "com.linkedin.common.Date" }, "end": { "month": 9, "year": 2025, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Project"
+    }
+  ]
+}

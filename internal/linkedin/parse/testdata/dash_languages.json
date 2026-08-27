@@ -1,0 +1,15 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileLanguageCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profileLanguage:(ACoAATEST,40)",
+      "urn:li:fsd_profileLanguage:(ACoAATEST,41)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 2, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    { "entityUrn": "urn:li:fsd_profileLanguage:(ACoAATEST,41)", "name": "Spanish", "proficiency": "PROFESSIONAL_WORKING", "$type": "com.linkedin.voyager.dash.identity.profile.Language" },
+    { "entityUrn": "urn:li:fsd_profileLanguage:(ACoAATEST,40)", "name": "English", "proficiency": "NATIVE_OR_BILINGUAL", "$type": "com.linkedin.voyager.dash.identity.profile.Language" }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profileVolunteerExperienceCollection:sanitized",
+    "*elements": [
+      "urn:li:fsd_profileVolunteerExperience:(ACoAATEST,50)"
+    ],
+    "paging": { "count": 20, "start": 0, "total": 1, "links": [] },
+    "$type": "com.linkedin.restli.common.CollectionResponse"
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profileVolunteerExperience:(ACoAATEST,50)",
+      "role": "Event Lead \u0026 Core Team",
+      "companyName": "Community Tech Fest",
+      "companyUrn": "urn:li:fsd_company:104401257",
+      "cause": "EDUCATION",
+      "description": "Organized a regional student technology festival.",
+      "dateRange": { "start": { "month": 8, "year": 2024, "$type": "com.linkedin.common.Date" }, "end": { "month": 10, "year": 2024, "$type": "com.linkedin.common.Date" }, "$type": "com.linkedin.common.DateRange" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.VolunteerExperience"
+    }
+  ]
+}
