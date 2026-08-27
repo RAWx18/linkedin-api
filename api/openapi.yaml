@@ -1,0 +1,214 @@
+# SPDX-FileCopyrightText: 2026 Ryan Madhuwala
+# SPDX-License-Identifier: MIT
+
+openapi: 3.0.3
+info:
+  title: linkedin-api
+  description: >
+    Retrieves publicly accessible LinkedIn profile information via LinkedIn's
+    internal profile API and returns it as a normalized JSON document.
+  version: "2.0"
+servers:
+  - url: https://your-app.azurecontainerapps.io
+    description: Production (replace with the deployed URL)
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /v1/profile:
+    get:
+      summary: Fetch a normalized LinkedIn profile
+      operationId: getProfile
+      parameters:
+        - name: url
+          in: query
+          required: true
+          description: A LinkedIn profile URL of the form https://www.linkedin.com/in/{identifier}
+          schema:
+            type: string
+          example: https://www.linkedin.com/in/williamhgates
+      security:
+        - apiKey: []
+      responses:
+        "200":
+          description: The normalized profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResult"
+        "400":
+          description: The request was malformed or the URL was invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: A valid API key was required and not provided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: The profile could not be found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: The public rate limit or the upstream rate limit was exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: Upstream authentication failed or the response could not be parsed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: LinkedIn was temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "504":
+          description: The upstream request timed out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        "200":
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /readyz:
+    get:
+      summary: Readiness probe
+      operationId: readyz
+      responses:
+        "200":
+          description: The service is ready to serve traffic.
+        "503":
+          description: The service is not ready.
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    ProfileResult:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Profile"
+        meta:
+          $ref: "#/components/schemas/Meta"
+      required: [data, meta]
+
+    Meta:
+      type: object
+      properties:
+        retrieved_at:
+          type: string
+          format: date-time
+        schema_version:
+          type: string
+          example: "2.0"
+        source:
+          type: string
+          example: linkedin
+        cached:
+          type: boolean
+      required: [retrieved_at, schema_version, source, cached]
+
+    Profile:
+      type: object
+      properties:
+        public_identifier: { type: string }
+        profile_url: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        full_name: { type: string }
+        headline: { type: string }
+        summary: { type: string }
+        location:
+          $ref: "#/components/schemas/Location"
+        profile_picture:
+          $ref: "#/components/schemas/Image"
+        background_image:
+          $ref: "#/components/schemas/Image"
+        websites:
+          type: array
+          items:
+            $ref: "#/components/schemas/Website"
+        verified: { type: boolean }
+        influencer: { type: boolean }
+        premium: { type: boolean }
+      required: [public_identifier, profile_url]
+
+    Location:
+      type: object
+      properties:
+        country_code: { type: string }
+        text: { type: string }
+
+    Image:
+      type: object
+      properties:
+        url: { type: string }
+      required: [url]
+
+    Website:
+      type: object
+      properties:
+        url: { type: string }
+        category: { type: string }
+      required: [url]
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_request
+                - unauthorized
+                - profile_not_found
+                - rate_limited
+                - upstream_auth_failed
+                - upstream_rate_limited
+                - upstream_timeout
+                - upstream_unavailable
+                - upstream_parse_error
+                - internal_error
+            message:
+              type: string
+            request_id:
+              type: string
+          required: [code, message]
+      required: [error]
