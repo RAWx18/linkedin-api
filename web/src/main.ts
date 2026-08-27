@@ -96,6 +96,15 @@ function safeURL(url: string): string | undefined {
   }
 }
 
+function previewImageURL(url: string): string | undefined {
+  const href = safeURL(url);
+  if (!href) return undefined;
+  const parsed = new URL(href);
+  return parsed.protocol === 'https:' && parsed.host === 'media.licdn.com'
+    ? `/v1/image?url=${encodeURIComponent(href)}`
+    : href;
+}
+
 function link(url: string, label: string): HTMLElement {
   const href = safeURL(url);
   if (!href) return el('span', 'invalid-link', label);
@@ -170,29 +179,53 @@ function entries(items: HTMLElement[]): HTMLElement {
   box.append(...items);
   return box;
 }
-function imageItem(label: string, image: NonNullable<Profile['profile_picture']>): HTMLElement {
-  const href = safeURL(image.url);
-  if (!href) return el('span', 'invalid-link', label);
-  const item = el('a', 'image-item');
-  item.href = href;
-  item.target = '_blank';
-  item.rel = 'noopener noreferrer';
-  const preview = el('img');
-  preview.src = href;
-  preview.alt = `${label} preview`;
-  preview.loading = 'lazy';
-  const copy = el('span');
-  copy.append(el('strong', undefined, label));
-  if (image.variants?.length) copy.append(el('small', undefined, `${image.variants.length} sizes`));
-  item.append(preview, copy);
-  return item;
+
+function responsiveImage(
+  image: NonNullable<Profile['profile_picture']>,
+  alt: string,
+  className: string,
+  displayWidth: number,
+  sizes: string,
+): HTMLImageElement | undefined {
+  const variants = (image.variants ?? [])
+    .map((variant) => ({ width: variant.width, url: previewImageURL(variant.url) }))
+    .filter((variant): variant is { width: number; url: string } => variant.width > 0 && !!variant.url)
+    .sort((left, right) => left.width - right.width)
+    .filter((variant, index, all) => index === 0 || variant.width !== all[index - 1].width);
+  const baseURL = previewImageURL(image.url);
+  if (!baseURL && variants.length === 0) return undefined;
+
+  const preferred = variants.find((variant) => variant.width >= displayWidth * 2) ?? variants.at(-1);
+  const img = el('img', className);
+  img.src = preferred?.url ?? baseURL!;
+  img.alt = alt;
+  img.decoding = 'async';
+  img.loading = 'eager';
+  if (variants.length) {
+    img.srcset = variants.map((variant) => `${variant.url} ${variant.width}w`).join(', ');
+    img.sizes = sizes;
+  }
+
+  const fallbacks = [...new Set([baseURL, ...[...variants].reverse().map((variant) => variant.url)].filter(Boolean))] as string[];
+  const attempted = new Set<string>();
+  img.addEventListener('error', () => {
+    attempted.add(img.currentSrc || img.src);
+    img.removeAttribute('srcset');
+    const fallback = fallbacks.find((url) => !attempted.has(url));
+    if (fallback) {
+      img.src = fallback;
+      return;
+    }
+    img.hidden = true;
+    img.parentElement?.classList.add('image-failed');
+  });
+  return img;
 }
 
 function jsonViewer(raw: string): HTMLElement {
-  const block = el('details', 'panel json-block');
+  const block = el('section', 'workspace-panel json-panel');
   const bar = el('div', 'json-bar');
-  const summary = el('summary');
-  summary.append(el('span', 'section-title', 'JSON response'));
+  bar.append(el('h2', undefined, 'JSON response'));
   const copy = el('button', 'copy-btn', 'Copy JSON');
   copy.type = 'button';
   copy.addEventListener('click', async () => {
@@ -215,39 +248,49 @@ function jsonViewer(raw: string): HTMLElement {
   } catch {
     /* show the body as-is */
   }
-  block.append(summary, bar, el('pre', 'json-pre', pretty));
+  block.append(bar, el('pre', 'json-pre', pretty));
   return block;
 }
 
-function renderProfile(result: ProfileResult, raw: string): void {
+async function renderProfile(result: ProfileResult, raw: string): Promise<void> {
   const { data, meta } = result;
   output.replaceChildren();
-  output.className = 'output result-grid';
+  output.className = 'output result-workspace';
+  const preview = el('section', 'workspace-panel preview-panel');
+  const previewBar = el('div', 'workspace-bar');
+  previewBar.append(el('h2', undefined, 'Profile preview'));
+  const previewBody = el('div', 'preview-body');
   const card = el('article', 'profile-card');
+  const name = data.full_name || [data.first_name, data.last_name].filter(Boolean).join(' ') || data.public_identifier;
 
-  const backgroundURL = data.background_image?.url ? safeURL(data.background_image.url) : undefined;
-  if (backgroundURL) {
-    const banner = el('div', 'banner');
-    const img = el('img');
-    img.src = backgroundURL;
-    img.alt = '';
-    img.loading = 'lazy';
-    banner.append(img);
-    card.append(banner);
+  const banner = el('div', 'banner');
+  if (data.background_image) {
+    const background = responsiveImage(
+      data.background_image,
+      '',
+      'banner-image',
+      560,
+      '(max-width: 860px) calc(100vw - 2rem), 560px',
+    );
+    if (background) {
+      banner.append(background);
+    }
   }
+  card.append(banner);
 
   const head = el('div', 'card-head');
-  const profilePictureURL = data.profile_picture?.url ? safeURL(data.profile_picture.url) : undefined;
-  if (profilePictureURL) {
-    const avatar = el('img', 'avatar');
-    avatar.src = profilePictureURL;
-    avatar.alt = data.full_name ?? data.public_identifier;
-    head.append(avatar);
+  const avatarFrame = el('div', 'avatar-frame');
+  avatarFrame.append(el('span', 'avatar-fallback', name.charAt(0).toUpperCase()));
+  if (data.profile_picture) {
+    const avatar = responsiveImage(data.profile_picture, name, 'avatar', 84, '84px');
+    if (avatar) {
+      avatarFrame.append(avatar);
+    }
   }
+  head.append(avatarFrame);
 
   const idBox = el('div', 'id-box');
   const nameRow = el('div', 'name-row');
-  const name = data.full_name || [data.first_name, data.last_name].filter(Boolean).join(' ') || data.public_identifier;
   nameRow.append(el('h2', undefined, name));
   const badges: [string, boolean | undefined][] = [
     ['Verified', data.verified],
@@ -275,7 +318,8 @@ function renderProfile(result: ProfileResult, raw: string): void {
     card.append(about);
   }
 
-  output.append(card);
+  previewBody.append(card);
+  const previewSections = el('div', 'preview-sections');
   const main = el('div', 'main-stack');
   const side = el('aside', 'side-stack');
 
@@ -371,13 +415,6 @@ function renderProfile(result: ProfileResult, raw: string): void {
     side.append(collection('Topics', data.topics.length, chips));
   }
 
-  if (data.profile_picture || data.background_image) {
-    const images = el('div', 'image-list');
-    if (data.profile_picture) images.append(imageItem('Profile image', data.profile_picture));
-    if (data.background_image) images.append(imageItem('Background image', data.background_image));
-    side.append(collection('Images', images.childElementCount, images));
-  }
-
   const metaRow = el('div', 'meta-row');
   const rows: [string, string][] = [
     ['retrieved', new Date(meta.retrieved_at).toLocaleString()],
@@ -402,9 +439,24 @@ function renderProfile(result: ProfileResult, raw: string): void {
     side.prepend(section('Partial data', el('p', 'notice', `${unavailable.join(', ')} unavailable for this lookup.`)));
   }
 
-  if (main.childElementCount) output.append(main);
-  output.append(side);
+  if (main.childElementCount) previewSections.append(main);
+  previewSections.append(side);
+  previewBody.append(previewSections);
+  preview.append(previewBar, previewBody);
+  output.append(preview);
   output.append(jsonViewer(raw));
+
+  await Promise.all([...card.querySelectorAll('img')].map((image) => new Promise<void>((resolve) => {
+    if (image.complete) {
+      resolve();
+      return;
+    }
+    image.addEventListener('load', () => resolve(), { once: true });
+    image.addEventListener('error', () => {
+      if (image.hidden) resolve();
+    });
+    setTimeout(resolve, 5000);
+  })));
 }
 
 function renderError(raw: string): void {
@@ -468,7 +520,7 @@ async function fetchProfile(event: SubmitEvent): Promise<void> {
     const raw = await response.text();
 
     if (response.ok) {
-      renderProfile(JSON.parse(raw) as ProfileResult, raw);
+      await renderProfile(JSON.parse(raw) as ProfileResult, raw);
       setStatus('Profile retrieved.', 'ok');
       return;
     }
