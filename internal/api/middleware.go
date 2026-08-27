@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/garudexlabs/linkedin-api/internal/domain"
@@ -45,7 +46,7 @@ func recoverer(logger *slog.Logger) middleware {
 
 // observe records latency and outcome for every request. It deliberately logs
 // only non-sensitive fields: never the query string, headers, or credentials.
-func observe(logger *slog.Logger, metrics *observability.Metrics) middleware {
+func observe(logger *slog.Logger, metrics *observability.Metrics, proxyDepth int) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -65,7 +66,7 @@ func observe(logger *slog.Logger, metrics *observability.Metrics) middleware {
 				"route", route,
 				"status", status,
 				"duration_ms", dur.Milliseconds(),
-				"client_ip", clientIP(r),
+				"client_ip", clientIP(r, proxyDepth),
 			)
 		})
 	}
@@ -82,9 +83,27 @@ func routeLabel(r *http.Request) string {
 	}
 }
 
-// clientIP returns the remote IP without the port. It intentionally trusts only
-// the connection's remote address rather than spoofable forwarding headers.
-func clientIP(r *http.Request) string {
+// clientIP returns the originating client IP. With trustedProxyDepth == 0 it
+// trusts only the connection's remote address. When the service runs behind a
+// known number of trusted reverse proxies (Azure Container Apps ingress is one
+// hop), it reads the address the closest trusted proxy recorded in
+// X-Forwarded-For, counting trustedProxyDepth entries from the right. Counting
+// from the right means a client cannot spoof its IP by sending its own
+// X-Forwarded-For value, because the trusted proxy always appends the real peer
+// after it.
+func clientIP(r *http.Request, trustedProxyDepth int) string {
+	if trustedProxyDepth > 0 {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			idx := len(parts) - trustedProxyDepth
+			if idx < 0 {
+				idx = 0
+			}
+			if ip := strings.TrimSpace(parts[idx]); ip != "" {
+				return ip
+			}
+		}
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

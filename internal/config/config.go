@@ -41,6 +41,9 @@ type ServerConfig struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	// TrustedProxyDepth is how many trusted reverse proxies sit in front of the
+	// service. 0 trusts only the connection's remote address.
+	TrustedProxyDepth int
 }
 
 type LinkedInConfig struct {
@@ -115,11 +118,12 @@ func Load() (*Config, error) {
 	c := &Config{
 		Env: getEnv("ENV", EnvDevelopment),
 		Server: ServerConfig{
-			Port:            getEnvInt("SERVER_PORT", 8080),
-			ReadTimeout:     getEnvDuration("SERVER_READ_TIMEOUT", 10*time.Second),
-			WriteTimeout:    getEnvDuration("SERVER_WRITE_TIMEOUT", 20*time.Second),
-			IdleTimeout:     getEnvDuration("SERVER_IDLE_TIMEOUT", 90*time.Second),
-			ShutdownTimeout: getEnvDuration("SHUTDOWN_TIMEOUT", 15*time.Second),
+			Port:              getEnvInt("SERVER_PORT", 8080),
+			ReadTimeout:       getEnvDuration("SERVER_READ_TIMEOUT", 10*time.Second),
+			WriteTimeout:      getEnvDuration("SERVER_WRITE_TIMEOUT", 20*time.Second),
+			IdleTimeout:       getEnvDuration("SERVER_IDLE_TIMEOUT", 90*time.Second),
+			ShutdownTimeout:   getEnvDuration("SHUTDOWN_TIMEOUT", 15*time.Second),
+			TrustedProxyDepth: getEnvInt("TRUSTED_PROXY_DEPTH", 0),
 		},
 		LinkedIn: LinkedInConfig{
 			LiAt:                  getEnv("LINKEDIN_LI_AT", ""),
@@ -194,6 +198,9 @@ func (c *Config) Validate() error {
 
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		problems = append(problems, "SERVER_PORT must be between 1 and 65535")
+	}
+	if c.Server.TrustedProxyDepth < 0 {
+		problems = append(problems, "TRUSTED_PROXY_DEPTH must be >= 0")
 	}
 	if u, err := url.Parse(c.LinkedIn.BaseURL); err != nil || u.Scheme != "https" || !urlx.IsLinkedInHost(u.Host) {
 		problems = append(problems, "LINKEDIN_BASE_URL must be an https URL on a linkedin.com host")

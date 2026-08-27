@@ -43,12 +43,14 @@ func NewRouter(d Deps) http.Handler {
 		publicAuth.allowFirstParty()
 	}
 
+	depth := d.Config.Server.TrustedProxyDepth
+
 	var apiMW []middleware
-	if d.Recorder != nil {
-		apiMW = append(apiMW, auditMiddleware(d.Recorder))
+	if d.Config.Audit.Enabled || d.Recorder != nil {
+		apiMW = append(apiMW, auditMiddleware(d.Logger, d.Recorder, depth))
 	}
 	if d.Config.RateLimit.Enabled {
-		apiMW = append(apiMW, newRateLimiter(d.Config.RateLimit.RPS, d.Config.RateLimit.Burst, clientIP, audit.DecisionIPLimited).middleware)
+		apiMW = append(apiMW, newRateLimiter(d.Config.RateLimit.RPS, d.Config.RateLimit.Burst, func(r *http.Request) string { return clientIP(r, depth) }, audit.DecisionIPLimited).middleware)
 	}
 	apiMW = append(apiMW, publicAuth.middleware)
 	if d.Config.RateLimit.Enabled {
@@ -71,8 +73,12 @@ func NewRouter(d Deps) http.Handler {
 	}
 
 	if d.UI != nil {
-		mux.Handle("GET /", http.FileServer(http.FS(d.UI)))
+		files := http.FileServer(http.FS(d.UI))
+		mux.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache")
+			files.ServeHTTP(w, r)
+		}))
 	}
 
-	return chain(mux, requestID, observe(d.Logger, d.Metrics), recoverer(d.Logger))
+	return chain(mux, requestID, observe(d.Logger, d.Metrics, depth), recoverer(d.Logger))
 }

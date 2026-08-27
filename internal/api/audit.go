@@ -4,17 +4,21 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/garudexlabs/linkedin-api/internal/audit"
 )
 
-// auditMiddleware records one durable, privacy-safe row per API request. It is
-// the outermost API-route layer so it also captures requests rejected by rate
-// limiting or authentication. Recording is a non-blocking enqueue, so a slow or
-// failing audit store never delays or fails the profile lookup itself.
-func auditMiddleware(rec audit.Recorder) middleware {
+// auditMiddleware records one privacy-safe entry per API request. It is the
+// outermost API-route layer so it also captures requests rejected by rate
+// limiting or authentication. Every request is emitted as a structured "audit"
+// log event, which the platform log pipeline (Azure Log Analytics) keeps as a
+// complete, queryable history regardless of storage. When a durable store is
+// present the record is additionally enqueued for it; that enqueue is
+// non-blocking, so a slow or failing store never delays the profile lookup.
+func auditMiddleware(logger *slog.Logger, rec audit.Recorder, proxyDepth int) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ev := audit.NewEvent()
@@ -24,14 +28,19 @@ func auditMiddleware(rec audit.Recorder) middleware {
 			start := time.Now()
 			next.ServeHTTP(sr, r)
 
-			rec.Record(ev.Snapshot(audit.Record{
+			record := ev.Snapshot(audit.Record{
 				Time:      start.UTC(),
 				RequestID: RequestIDFromContext(r.Context()),
-				ClientIP:  clientIP(r),
+				ClientIP:  clientIP(r, proxyDepth),
 				KeyID:     audit.KeyID(extractAPIKey(r)),
 				Status:    sr.Status(),
 				Latency:   time.Since(start),
-			}))
+			})
+
+			audit.Log(r.Context(), logger, record)
+			if rec != nil {
+				rec.Record(record)
+			}
 		})
 	}
 }
