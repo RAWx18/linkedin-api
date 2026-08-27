@@ -28,12 +28,20 @@ type Deps struct {
 
 // NewRouter builds the fully wired HTTP handler. The API surface (/v1/*) is
 // wrapped with rate limiting and API-key auth; health, metrics and the UI are
-// intentionally exempt so probes and dashboards work without credentials.
+// intentionally exempt so probes and dashboards work without credentials. When
+// the UI is served, same-origin requests from it are admitted without an API key
+// so the server's key never reaches the browser; programmatic clients still need
+// the key, and the admin endpoint is never exempt.
 func NewRouter(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	ph := &profileHandler{svc: d.Service, allowCaller: d.Config.LinkedIn.AllowCallerSession}
 	hh := &healthHandler{ready: d.Ready}
+
+	publicAuth := newAPIKeyAuth(d.Config.APIKeys)
+	if d.UI != nil {
+		publicAuth.allowFirstParty()
+	}
 
 	var apiMW []middleware
 	if d.Recorder != nil {
@@ -42,7 +50,7 @@ func NewRouter(d Deps) http.Handler {
 	if d.Config.RateLimit.Enabled {
 		apiMW = append(apiMW, newRateLimiter(d.Config.RateLimit.RPS, d.Config.RateLimit.Burst, clientIP, audit.DecisionIPLimited).middleware)
 	}
-	apiMW = append(apiMW, newAPIKeyAuth(d.Config.APIKeys).middleware)
+	apiMW = append(apiMW, publicAuth.middleware)
 	if d.Config.RateLimit.Enabled {
 		apiMW = append(apiMW, newRateLimiter(d.Config.RateLimit.KeyRPS, d.Config.RateLimit.KeyBurst, extractAPIKey, audit.DecisionKeyLimited).middleware)
 	}
