@@ -79,19 +79,41 @@ stays consistent. It applies only to that request and never changes the server
 
 ## Response shape and normalization
 
-The member entity carries the identity and top-card fields. The parser reads only
-what the domain model needs and ignores the rest of the large payload:
+The member entity is the identity top-card. The parser reads every stable,
+legitimately available field and ignores the rest of the large payload:
 
-- Name (`firstName`, `lastName`), `headline`, and `summary`.
+- Name (`firstName`, `lastName`), `headline`, `summary`, and the primary locale
+  (`primaryLocale` becomes `profile_language`, such as `en_US`).
 - Profile and background pictures, each a `displayImage.vectorImage` with a root
-  URL and sized artifacts; the highest-resolution artifact is used.
-- `location.countryCode`, published websites, and the verified, influencer, and
-  premium flags.
+  URL and sized artifacts. Every artifact becomes an image variant (width,
+  height, url) ordered smallest to largest, and the largest is also the primary
+  `url`.
+- `location.countryCode`, published `websites`, the creator's featured website
+  (`creatorInfo.creatorWebsite`), and the creator's associated topics
+  (`creatorInfo.associatedHashtagUrns`, decoded to hashtag names).
+- Status flags: `verified`, `influencer`, `premium`, `creator`, `student`,
+  `memorialized`, and `top_voice` (from the presence of `topVoiceBadge`).
 
 An empty collection maps to a not-found result. A body that cannot be decoded
-maps to a parse error. Optional fields are omitted when absent; the parser never
-invents values. Identity fields, the public identifier and canonical URL, come
-from the validated request, not the response body.
+maps to a parse error. Optional nested sections use pointers so a missing, null,
+or partial section is skipped rather than failing the profile. Optional fields
+are omitted when absent; the parser never invents values. Identity fields, the
+public identifier and canonical URL, come from the validated request, not the
+response body.
+
+### What is not included
+
+The `q=memberIdentity` finder returns the top-card only. Detailed sections such as
+experience, education, skills, certifications, languages, and recommendations are
+not in this response; the card references them by separate card urns
+(`experienceCardUrn`, `educationCardUrn`) that resolve through additional Voyager
+card queries. Those queries rely on versioned internal decoration and GraphQL
+query identifiers that are not stable to reproduce without guessing, so this
+service does not fetch them and does not fabricate the sections. Adding them later
+means capturing real sanitized fixtures for each card, then normalizing them
+behind optional, bounded, concurrent enrichment with its own deadline, so a slow
+or missing section can never delay or fail the core profile. The current response
+maximizes the real data available from the one stable endpoint.
 
 ## Timeouts and retries
 

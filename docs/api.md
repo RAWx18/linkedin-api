@@ -81,17 +81,29 @@ Response:
     "full_name": "Bill Gates",
     "headline": "Chair, Gates Foundation and Founder, Breakthrough Energy",
     "summary": "Chair of the Gates Foundation. Founder of Breakthrough Energy.",
+    "profile_language": "en_US",
     "location": { "country_code": "US" },
-    "profile_picture": { "url": "https://media.licdn.com/dms/image/v2/example/800_800/pic.jpg" },
-    "background_image": { "url": "https://media.licdn.com/dms/image/v2/example/cover.jpg" },
+    "profile_picture": {
+      "url": "https://media.licdn.com/dms/image/v2/example/800_800/pic.jpg",
+      "variants": [
+        { "width": 100, "height": 100, "url": "https://media.licdn.com/dms/image/v2/example/100_100/pic.jpg" },
+        { "width": 400, "height": 400, "url": "https://media.licdn.com/dms/image/v2/example/400_400/pic.jpg" },
+        { "width": 800, "height": 800, "url": "https://media.licdn.com/dms/image/v2/example/800_800/pic.jpg" }
+      ]
+    },
+    "background_image": { "url": "https://media.licdn.com/dms/image/v2/example/1400_350/cover.jpg" },
     "websites": [ { "url": "https://gatesnot.es/sourcecode-li", "category": "BLOG" } ],
+    "creator_website": "https://gatesnot.es/AI",
+    "topics": ["books", "climatechange", "healthcare", "innovation", "sustainability"],
     "verified": true,
     "influencer": true,
-    "premium": true
+    "premium": true,
+    "creator": true,
+    "top_voice": true
   },
   "meta": {
     "retrieved_at": "2026-08-27T09:30:00Z",
-    "schema_version": "2.0",
+    "schema_version": "2.1",
     "source": "linkedin",
     "cached": false
   }
@@ -124,12 +136,23 @@ The top level is `{ "data": <profile>, "meta": <metadata> }`. The complete schem
 is in [openapi.yaml](../api/openapi.yaml). Notes:
 
 - `public_identifier` and `profile_url` are always present. Other scalars are
-  omitted when absent, and `websites` is omitted when empty.
+  omitted when absent, and arrays are omitted when empty.
+- `profile_language` is the profile's primary locale, such as `en_US`.
 - `location` exposes `country_code`, and `text` when a full place name is
   available.
-- `verified`, `influencer`, and `premium` appear only when true.
+- `profile_picture` and `background_image` expose `url` (the largest rendition)
+  and `variants`, every sized rendition ordered smallest to largest.
+- `websites` are member-published links; `creator_website` and `topics` come from
+  the member's creator profile when present.
+- `verified`, `influencer`, `premium`, `creator`, `top_voice`, `student`, and
+  `memorialized` appear only when true.
 - `meta.cached` is true when the result came from the cache. `meta.source` is
   `linkedin`, and `meta.schema_version` tracks the response contract.
+
+The response is the identity top-card the base profile endpoint returns. Detailed
+sections such as experience, education, skills, and certifications are served by
+separate Voyager cards that this service does not fetch, so they are not included.
+The rationale is in [reverse-engineering.md](reverse-engineering.md).
 
 ## Health and metrics
 

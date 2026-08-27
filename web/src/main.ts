@@ -21,12 +21,19 @@ interface Profile {
   headline?: string;
   summary?: string;
   location?: { country_code?: string; text?: string };
-  profile_picture?: { url: string };
-  background_image?: { url: string };
+  profile_language?: string;
+  profile_picture?: { url: string; variants?: { width: number; height?: number; url: string }[] };
+  background_image?: { url: string; variants?: { width: number; height?: number; url: string }[] };
   websites?: { url: string; category?: string }[];
+  creator_website?: string;
+  topics?: string[];
   verified?: boolean;
   influencer?: boolean;
   premium?: boolean;
+  creator?: boolean;
+  top_voice?: boolean;
+  student?: boolean;
+  memorialized?: boolean;
 }
 
 interface Meta {
@@ -129,7 +136,9 @@ function renderProfile(result: ProfileResult, raw: string): void {
   nameRow.append(el('h2', undefined, data.full_name || data.public_identifier));
   const badges: [string, boolean | undefined][] = [
     ['Verified', data.verified],
+    ['Top Voice', data.top_voice],
     ['Influencer', data.influencer],
+    ['Creator', data.creator],
     ['Premium', data.premium],
   ];
   for (const [label, on] of badges) {
@@ -156,6 +165,16 @@ function renderProfile(result: ProfileResult, raw: string): void {
       list.append(item);
     }
     card.append(section('Websites', list));
+  }
+
+  if (data.creator_website) {
+    card.append(section('Creator website', link(data.creator_website, data.creator_website)));
+  }
+
+  if (data.topics?.length) {
+    const chips = el('div', 'name-row');
+    for (const t of data.topics) chips.append(el('span', 'badge', `#${t}`));
+    card.append(section('Topics', chips));
   }
 
   const metaRow = el('div', 'meta-row');

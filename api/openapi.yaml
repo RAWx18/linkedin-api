@@ -7,7 +7,7 @@ info:
   description: >
     Retrieves publicly accessible LinkedIn profile information via LinkedIn's
     internal profile API and returns it as a normalized JSON document.
-  version: "2.0"
+  version: "2.1"
 servers:
   - url: https://your-app.azurecontainerapps.io
     description: Production (replace with the deployed URL)
@@ -174,7 +174,7 @@ components:
           format: date-time
         schema_version:
           type: string
-          example: "2.0"
+          example: "2.1"
         source:
           type: string
           example: linkedin
@@ -192,6 +192,7 @@ components:
         full_name: { type: string }
         headline: { type: string }
         summary: { type: string }
+        profile_language: { type: string, example: en_US }
         location:
           $ref: "#/components/schemas/Location"
         profile_picture:
@@ -202,9 +203,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Website"
+        creator_website: { type: string }
+        topics:
+          type: array
+          items: { type: string }
         verified: { type: boolean }
         influencer: { type: boolean }
         premium: { type: boolean }
+        creator: { type: boolean }
+        top_voice: { type: boolean }
+        student: { type: boolean }
+        memorialized: { type: boolean }
       required: [public_identifier, profile_url]
 
     Location:
@@ -217,7 +226,19 @@ components:
       type: object
       properties:
         url: { type: string }
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageVariant"
       required: [url]
+
+    ImageVariant:
+      type: object
+      properties:
+        width: { type: integer }
+        height: { type: integer }
+        url: { type: string }
+      required: [width, url]
 
     Website:
       type: object
