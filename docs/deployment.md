@@ -24,9 +24,9 @@ with the UI embedded, and the result ships on a distroless non-root base.
 The Bicep is split so an automated first deploy never deadlocks.
 [deploy/bicep/infra.bicep](../deploy/bicep/infra.bicep) provisions the Azure
 Container Registry, a user-assigned identity granted `AcrPull` on the registry, a
-Container Apps environment, a Log Analytics workspace, and Application Insights.
-[deploy/bicep/app.bicep](../deploy/bicep/app.bicep) then deploys the Container App
-against an image that already exists in the registry. The app pulls with the
+Container Apps environment, and a Log Analytics workspace that receives container
+logs. [deploy/bicep/app.bicep](../deploy/bicep/app.bicep) then deploys the
+Container App against an image that already exists in the registry. The app pulls with the
 user-assigned identity, which holds `AcrPull` before the app is created, so it
 never waits on a role assignment that depends on itself. Ingress is external on
 port 8080 with liveness and readiness probes wired to `/healthz` and `/readyz`.
@@ -47,7 +47,7 @@ per-instance limits.
 
 ## GitHub Actions
 
-Two workflows live in [.github/workflows](../.github/workflows):
+Three workflows live in [.github/workflows](../.github/workflows):
 
 - `ci.yml` runs formatting checks, `go vet`, the race test suite,
   `golangci-lint`, the UI build, and a Docker build on every push and pull
@@ -55,6 +55,9 @@ Two workflows live in [.github/workflows](../.github/workflows):
 - `deploy.yml` logs in to Azure with OIDC, provisions `infra.bicep`, builds the
   image inside ACR with `az acr build`, deploys `app.bicep` against that image,
   and smoke-tests the public `/healthz` endpoint.
+- `destroy.yml` tears the deployment down by deleting the resource group. It is a
+  manual `workflow_dispatch` that requires re-typing the resource group name to
+  confirm, so a full teardown is done through GitHub rather than a local machine.
 
 Set these repository secrets for deployment: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `LINKEDIN_LI_AT`, `LINKEDIN_JSESSIONID`,
@@ -107,7 +110,7 @@ itself automatically and surfaces the state for an operator:
    and admits only one probe per cooldown, which doubles on repeated failures, so
    a dead session is not hammered.
 3. Replace the credentials. Obtain a fresh `li_at` and `JSESSIONID` from a
-   signed-in browser (see [configuration.md](configuration.md#session-cookies)),
+   signed-in browser (see [session-cookies.md](session-cookies.md)),
    update the Container App secrets, and roll a new revision so they are picked up:
 
    ```bash

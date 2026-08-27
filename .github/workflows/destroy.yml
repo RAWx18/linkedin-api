@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Ryan Madhuwala
+# SPDX-License-Identifier: MIT
+
+name: Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      resourceGroup:
+        description: Resource group to delete (removes ALL resources in it)
+        required: true
+      confirm:
+        description: Re-type the resource group name to confirm deletion
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm resource group name
+        run: |
+          if [ "${{ github.event.inputs.resourceGroup }}" != "${{ github.event.inputs.confirm }}" ]; then
+            echo "::error::confirm input does not match resourceGroup; aborting"
+            exit 1
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete resource group
+        run: |
+          rg="${{ github.event.inputs.resourceGroup }}"
+          if az group show --name "$rg" >/dev/null 2>&1; then
+            az group delete --name "$rg" --yes
+            echo "Deleted resource group $rg"
+          else
+            echo "Resource group $rg does not exist; nothing to do"
+          fi
