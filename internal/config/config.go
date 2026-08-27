@@ -20,11 +20,6 @@ const (
 	EnvProduction  = "production"
 )
 
-// defaultUserAgent mimics a current desktop browser because the Voyager API
-// rejects requests that do not present a browser-like User-Agent.
-const defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-	"(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
 // Config aggregates every runtime setting. It is loaded once at startup and
 // treated as immutable thereafter.
 type Config struct {
@@ -49,14 +44,16 @@ type ServerConfig struct {
 }
 
 type LinkedInConfig struct {
-	LiAt           string
-	JSessionID     string
-	BaseURL        string
-	UserAgent      string
-	Timeout        time.Duration
-	MaxRetries     int
-	RetryBackoff   time.Duration
-	ProfileTimeout time.Duration
+	LiAt               string
+	JSessionID         string
+	BaseURL            string
+	UserAgent          string
+	AcceptLanguage     string
+	Timeout            time.Duration
+	MaxRetries         int
+	RetryBackoff       time.Duration
+	ProfileTimeout     time.Duration
+	AllowCallerSession bool
 }
 
 type CacheConfig struct {
@@ -84,6 +81,7 @@ type UpstreamConfig struct {
 	BreakerCooldown  time.Duration
 	SessionThreshold int
 	SessionCooldown  time.Duration
+	CallerSessionTTL time.Duration
 	NegativeCacheTTL time.Duration
 }
 
@@ -123,14 +121,16 @@ func Load() (*Config, error) {
 			ShutdownTimeout: getEnvDuration("SHUTDOWN_TIMEOUT", 15*time.Second),
 		},
 		LinkedIn: LinkedInConfig{
-			LiAt:           getEnv("LINKEDIN_LI_AT", ""),
-			JSessionID:     getEnv("LINKEDIN_JSESSIONID", ""),
-			BaseURL:        getEnv("LINKEDIN_BASE_URL", "https://www.linkedin.com"),
-			UserAgent:      getEnv("LINKEDIN_USER_AGENT", defaultUserAgent),
-			Timeout:        getEnvDuration("HTTP_REQUEST_TIMEOUT", 10*time.Second),
-			MaxRetries:     getEnvInt("HTTP_MAX_RETRIES", 2),
-			RetryBackoff:   getEnvDuration("HTTP_RETRY_BACKOFF", 300*time.Millisecond),
-			ProfileTimeout: getEnvDuration("PROFILE_TIMEOUT", 15*time.Second),
+			LiAt:               getEnv("LINKEDIN_LI_AT", ""),
+			JSessionID:         getEnv("LINKEDIN_JSESSIONID", ""),
+			BaseURL:            getEnv("LINKEDIN_BASE_URL", "https://www.linkedin.com"),
+			UserAgent:          getEnv("LINKEDIN_USER_AGENT", ""),
+			AcceptLanguage:     getEnv("LINKEDIN_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
+			Timeout:            getEnvDuration("HTTP_REQUEST_TIMEOUT", 10*time.Second),
+			MaxRetries:         getEnvInt("HTTP_MAX_RETRIES", 2),
+			RetryBackoff:       getEnvDuration("HTTP_RETRY_BACKOFF", 300*time.Millisecond),
+			ProfileTimeout:     getEnvDuration("PROFILE_TIMEOUT", 15*time.Second),
+			AllowCallerSession: getEnvBool("LINKEDIN_ALLOW_CALLER_SESSION", true),
 		},
 		Cache: CacheConfig{
 			Enabled:    getEnvBool("CACHE_ENABLED", true),
@@ -152,6 +152,7 @@ func Load() (*Config, error) {
 			BreakerCooldown:  getEnvDuration("UPSTREAM_BREAKER_COOLDOWN", 30*time.Second),
 			SessionThreshold: getEnvInt("UPSTREAM_SESSION_THRESHOLD", 2),
 			SessionCooldown:  getEnvDuration("UPSTREAM_SESSION_COOLDOWN", 5*time.Minute),
+			CallerSessionTTL: getEnvDuration("CALLER_SESSION_UNHEALTHY_TTL", 5*time.Minute),
 			NegativeCacheTTL: getEnvDuration("UPSTREAM_NEG_CACHE_TTL", time.Minute),
 		},
 		Audit: AuditConfig{
@@ -204,6 +205,9 @@ func (c *Config) Validate() error {
 	if c.LinkedIn.ProfileTimeout <= 0 {
 		problems = append(problems, "PROFILE_TIMEOUT must be > 0")
 	}
+	if c.LinkedIn.LiAt != "" && c.LinkedIn.UserAgent == "" {
+		problems = append(problems, "LINKEDIN_USER_AGENT is required when LINKEDIN_LI_AT is set; set it to the exact User-Agent of the browser where you obtained the li_at and JSESSIONID cookies")
+	}
 	if c.LinkedIn.MaxRetries > 0 && c.LinkedIn.RetryBackoff <= 0 {
 		problems = append(problems, "HTTP_RETRY_BACKOFF must be > 0 when HTTP_MAX_RETRIES > 0")
 	}
@@ -233,6 +237,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Upstream.SessionCooldown <= 0 {
 		problems = append(problems, "UPSTREAM_SESSION_COOLDOWN must be > 0")
+	}
+	if c.Upstream.CallerSessionTTL <= 0 {
+		problems = append(problems, "CALLER_SESSION_UNHEALTHY_TTL must be > 0")
 	}
 	if c.Audit.Enabled {
 		if c.Audit.DBPath == "" {

@@ -63,7 +63,7 @@ func validProdConfig() *Config {
 	return &Config{
 		Env:       EnvProduction,
 		Server:    ServerConfig{Port: 8080},
-		LinkedIn:  LinkedInConfig{BaseURL: "https://www.linkedin.com", Timeout: time.Second, ProfileTimeout: time.Second},
+		LinkedIn:  LinkedInConfig{BaseURL: "https://www.linkedin.com", UserAgent: "Mozilla/5.0 (test) Browser/1.0", Timeout: time.Second, ProfileTimeout: time.Second},
 		Cache:     CacheConfig{Enabled: true, MaxEntries: 10},
 		RateLimit: RateLimitConfig{Enabled: true, RPS: 1, Burst: 1, KeyRPS: 1, KeyBurst: 1},
 		Upstream: UpstreamConfig{
@@ -74,6 +74,7 @@ func validProdConfig() *Config {
 			BreakerCooldown:  time.Second,
 			SessionThreshold: 1,
 			SessionCooldown:  time.Second,
+			CallerSessionTTL: time.Second,
 		},
 		Log: LogConfig{Format: "json"},
 	}
@@ -98,6 +99,18 @@ func TestValidateProductionComplete(t *testing.T) {
 	cfg.APIKeys = []string{"key"}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRequiresUserAgentWithSession(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.LinkedIn.LiAt = "cookie"
+	cfg.LinkedIn.JSessionID = "ajax:1"
+	cfg.APIKeys = []string{"key"}
+	cfg.LinkedIn.UserAgent = ""
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "LINKEDIN_USER_AGENT") {
+		t.Errorf("a configured session must require an explicit User-Agent, got %v", err)
 	}
 }
 
