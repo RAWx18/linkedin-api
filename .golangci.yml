@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - misspell
+    - unconvert
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - bodyclose
+
+formatters:
+  enable:
+    - gofmt
