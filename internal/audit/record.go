@@ -57,6 +57,7 @@ type Record struct {
 	Retries         int
 	Latency         time.Duration
 	ErrorClass      string
+	Sections        string
 }
 
 // KeyID reduces an API key to a short, non-reversible fingerprint suitable for
@@ -89,6 +90,7 @@ type Event struct {
 	retries         int
 	rateDecision    string
 	errorClass      string
+	sections        string
 }
 
 // NewEvent returns an event that defaults to the allowed rate-limit decision.
@@ -181,6 +183,16 @@ func SetError(ctx context.Context, class string) {
 	}
 }
 
+// SetSections records which profile sections were requested and their fetch
+// outcome, as a compact stable list such as "education:ok,experience:ok".
+func SetSections(ctx context.Context, sections string) {
+	if e := FromContext(ctx); e != nil {
+		e.mu.Lock()
+		e.sections = sections
+		e.mu.Unlock()
+	}
+}
+
 // Snapshot merges the request-level base fields with the annotations accumulated
 // during handling and returns the finished record.
 func (e *Event) Snapshot(base Record) Record {
@@ -195,5 +207,6 @@ func (e *Event) Snapshot(base Record) Record {
 	base.Retries = e.retries
 	base.RateDecision = e.rateDecision
 	base.ErrorClass = e.errorClass
+	base.Sections = e.sections
 	return base
 }

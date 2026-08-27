@@ -41,5 +41,6 @@ func (h *profileHandler) handle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	audit.SetSections(r.Context(), audit.SectionsList(result.Meta.Sections))
 	writeJSON(w, http.StatusOK, result)
 }
