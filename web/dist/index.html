@@ -30,6 +30,18 @@
         <label for="apiKey">API key <span class="muted">(optional)</span></label>
         <input id="apiKey" name="apiKey" type="password" placeholder="X-API-Key" />
 
+        <details class="advanced">
+          <summary>Use your own LinkedIn session <span class="muted">(optional)</span></summary>
+          <p class="hint">
+            Sensitive session cookies. Sent once over HTTPS for this request only, never
+            stored in the browser, and cleared after the request completes.
+          </p>
+          <label for="liAt">li_at</label>
+          <input id="liAt" name="liAt" type="password" autocomplete="off" placeholder="li_at cookie" />
+          <label for="jsession">JSESSIONID</label>
+          <input id="jsession" name="jsession" type="password" autocomplete="off" placeholder="JSESSIONID cookie" />
+        </details>
+
         <button id="submit" type="submit">Fetch profile</button>
       </form>
 

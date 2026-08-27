@@ -92,6 +92,34 @@ button:disabled {
   cursor: progress;
 }
 
+.advanced {
+  margin-top: 0.25rem;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.advanced .hint {
+  margin: 0.5rem 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.advanced label {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.advanced input {
+  width: 100%;
+}
+
 #status {
   min-height: 1.2rem;
   margin: 1rem 0 0.5rem;

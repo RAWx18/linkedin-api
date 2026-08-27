@@ -6,6 +6,8 @@ import './style.css';
 const form = document.querySelector<HTMLFormElement>('#form')!;
 const urlInput = document.querySelector<HTMLInputElement>('#url')!;
 const keyInput = document.querySelector<HTMLInputElement>('#apiKey')!;
+const liAtInput = document.querySelector<HTMLInputElement>('#liAt')!;
+const jsessionInput = document.querySelector<HTMLInputElement>('#jsession')!;
 const output = document.querySelector<HTMLElement>('#output')!;
 const statusLine = document.querySelector<HTMLElement>('#status')!;
 const submit = document.querySelector<HTMLButtonElement>('#submit')!;
@@ -160,15 +162,26 @@ async function fetchProfile(event: SubmitEvent): Promise<void> {
     return;
   }
 
+  const liAt = liAtInput.value.trim();
+  const jsession = jsessionInput.value.trim();
+  if ((liAt === '') !== (jsession === '')) {
+    setStatus('Provide both li_at and JSESSIONID to use your own session, or leave both blank.', 'error');
+    return;
+  }
+
   submit.disabled = true;
   output.replaceChildren();
-  setStatus('Fetching…', 'pending');
+  setStatus('Fetching...', 'pending');
 
   try {
     const headers: Record<string, string> = {};
     const key = keyInput.value.trim();
     if (key) {
       headers['X-API-Key'] = key;
+    }
+    if (liAt && jsession) {
+      headers['X-LinkedIn-Li-At'] = liAt;
+      headers['X-LinkedIn-JSESSIONID'] = jsession;
     }
 
     const response = await fetch(`/v1/profile?url=${encodeURIComponent(url)}`, { headers });
@@ -191,6 +204,9 @@ async function fetchProfile(event: SubmitEvent): Promise<void> {
     setStatus(`Request failed: ${(err as Error).message}`, 'error');
   } finally {
     submit.disabled = false;
+    // Never retain caller session cookies client-side.
+    liAtInput.value = '';
+    jsessionInput.value = '';
   }
 }
 
